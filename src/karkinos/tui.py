@@ -145,7 +145,13 @@ class WorkerApp(App):
             capture_output=True,
             text=True,
         )
-        wt["ahead"] = int(result.stdout.strip()) if result.returncode == 0 else 0
+        if result.returncode == 0:
+            try:
+                wt["ahead"] = int(result.stdout.strip())
+            except ValueError:
+                wt["ahead"] = 0
+        else:
+            wt["ahead"] = 0
 
         # Last commit
         result = subprocess.run(
