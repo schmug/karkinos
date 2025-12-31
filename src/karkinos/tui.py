@@ -5,8 +5,9 @@ from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Container
+from textual.containers import Container, ScrollableContainer, Vertical
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -21,6 +22,230 @@ def get_default_branch() -> str:
     if result.returncode == 0:
         return result.stdout.strip().replace("refs/remotes/origin/", "")
     return "main"  # fallback
+
+
+class WorkerDetailScreen(ModalScreen):
+    """Modal screen showing worker details (logs, diff, info)."""
+
+    CSS = """
+    WorkerDetailScreen {
+        align: center middle;
+    }
+
+    #detail-container {
+        width: 90%;
+        height: 90%;
+        background: $surface;
+        border: thick $primary;
+        padding: 1 2;
+    }
+
+    #detail-header {
+        height: 3;
+        background: $primary-background;
+        padding: 0 1;
+        margin-bottom: 1;
+    }
+
+    #detail-content {
+        height: 1fr;
+        overflow-y: auto;
+        padding: 0 1;
+    }
+
+    #detail-footer {
+        height: 1;
+        dock: bottom;
+        background: $primary-background;
+        color: $text-muted;
+        padding: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "dismiss", "Close"),
+        ("q", "dismiss", "Close"),
+        ("l", "show_logs", "Logs"),
+        ("d", "show_diff", "Diff"),
+        ("i", "show_info", "Info"),
+    ]
+
+    def __init__(self, worker: dict, view: str = "info"):
+        super().__init__()
+        self.worker = worker
+        self.current_view = view
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="detail-container"):
+            yield Static(id="detail-header")
+            yield ScrollableContainer(Static(id="detail-text"), id="detail-content")
+            yield Static("[l] Logs  [d] Diff  [i] Info  [ESC/q] Close", id="detail-footer")
+
+    def on_mount(self) -> None:
+        self._update_view()
+
+    def _update_view(self) -> None:
+        """Update the display based on current view."""
+        header = self.query_one("#detail-header", Static)
+        content = self.query_one("#detail-text", Static)
+
+        branch = self.worker.get("branch", "unknown")
+
+        if self.current_view == "logs":
+            header.update(f"[bold cyan]Commit Log:[/] {branch}")
+            content.update(self._get_logs())
+        elif self.current_view == "diff":
+            header.update(f"[bold cyan]Diff vs {get_default_branch()}:[/] {branch}")
+            content.update(self._get_diff())
+        else:  # info
+            header.update(f"[bold cyan]Worker Info:[/] {branch}")
+            content.update(self._get_info())
+
+    def _get_logs(self) -> str:
+        """Get commit log for the worker branch."""
+        branch = self.worker.get("branch", "")
+        default_branch = get_default_branch()
+
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                f"{default_branch}..{branch}",
+                "--format=%C(yellow)%h%C(reset) %C(green)%ar%C(reset) %s%n%C(dim)%an%C(reset)%n",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0 or not result.stdout.strip():
+            return "[dim]No commits ahead of default branch[/]"
+
+        return result.stdout.strip()
+
+    def _get_diff(self) -> str:
+        """Get diff for the worker branch vs default branch."""
+        branch = self.worker.get("branch", "")
+        default_branch = get_default_branch()
+
+        result = subprocess.run(
+            ["git", "diff", f"{default_branch}...{branch}", "--stat"],
+            capture_output=True,
+            text=True,
+        )
+
+        stat_output = result.stdout.strip() if result.returncode == 0 else ""
+
+        result = subprocess.run(
+            ["git", "diff", f"{default_branch}...{branch}"],
+            capture_output=True,
+            text=True,
+        )
+
+        diff_output = result.stdout.strip() if result.returncode == 0 else ""
+
+        if not stat_output and not diff_output:
+            return "[dim]No changes vs default branch[/]"
+
+        # Colorize diff output
+        lines = []
+        if stat_output:
+            lines.append("[bold]File Summary:[/]")
+            lines.append(stat_output)
+            lines.append("")
+            lines.append("[bold]Diff:[/]")
+
+        for line in diff_output.split("\n"):
+            if line.startswith("+") and not line.startswith("+++"):
+                lines.append(f"[green]{line}[/]")
+            elif line.startswith("-") and not line.startswith("---"):
+                lines.append(f"[red]{line}[/]")
+            elif line.startswith("@@"):
+                lines.append(f"[cyan]{line}[/]")
+            elif line.startswith("diff "):
+                lines.append(f"[bold yellow]{line}[/]")
+            else:
+                lines.append(line)
+
+        return "\n".join(lines)
+
+    def _get_info(self) -> str:
+        """Get detailed info about the worker."""
+        branch = self.worker.get("branch", "unknown")
+        path = self.worker.get("path", "unknown")
+        status = self.worker.get("status", "unknown")
+        ahead = self.worker.get("ahead", 0)
+        default_branch = get_default_branch()
+
+        lines = [
+            f"[bold]Branch:[/] {branch}",
+            f"[bold]Path:[/] {path}",
+            f"[bold]Status:[/] {status}",
+            f"[bold]Commits ahead of {default_branch}:[/] +{ahead}",
+            "",
+        ]
+
+        # Get files changed
+        result = subprocess.run(
+            ["git", "diff", f"{default_branch}...{branch}", "--name-status"],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            lines.append("[bold]Changed Files:[/]")
+            for file_line in result.stdout.strip().split("\n"):
+                parts = file_line.split("\t", 1)
+                if len(parts) == 2:
+                    status_char, filename = parts
+                    if status_char == "A":
+                        lines.append(f"  [green]+ {filename}[/]")
+                    elif status_char == "D":
+                        lines.append(f"  [red]- {filename}[/]")
+                    elif status_char == "M":
+                        lines.append(f"  [yellow]~ {filename}[/]")
+                    else:
+                        lines.append(f"  {status_char} {filename}")
+        else:
+            lines.append("[dim]No changed files[/]")
+
+        lines.append("")
+
+        # Get recent commits
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                f"{default_branch}..{branch}",
+                "--oneline",
+                "-10",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            lines.append("[bold]Recent Commits:[/]")
+            for commit_line in result.stdout.strip().split("\n"):
+                lines.append(f"  [yellow]{commit_line}[/]")
+        else:
+            lines.append("[dim]No commits ahead of default branch[/]")
+
+        return "\n".join(lines)
+
+    def action_show_logs(self) -> None:
+        """Switch to logs view."""
+        self.current_view = "logs"
+        self._update_view()
+
+    def action_show_diff(self) -> None:
+        """Switch to diff view."""
+        self.current_view = "diff"
+        self._update_view()
+
+    def action_show_info(self) -> None:
+        """Switch to info view."""
+        self.current_view = "info"
+        self._update_view()
 
 
 class WorkerStatus(Static):
@@ -91,6 +316,9 @@ class WorkerApp(App):
         ("r", "refresh", "Refresh"),
         ("c", "cleanup", "Cleanup merged"),
         ("p", "create_pr", "Create PR"),
+        ("enter", "show_details", "Details"),
+        ("l", "show_logs", "Logs"),
+        ("d", "show_diff", "Diff"),
     ]
 
     worker_list: reactive[list[dict]] = reactive([])
@@ -277,9 +505,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to remove worktree: {w['path']}", severity="warning"
-                    )
+                    self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
                     continue
 
                 result = subprocess.run(
@@ -288,9 +514,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to delete branch: {branch}", severity="warning"
-                    )
+                    self.notify(f"Failed to delete branch: {branch}", severity="warning")
                     continue
 
                 cleaned += 1
@@ -307,6 +531,37 @@ class WorkerApp(App):
             if branch:
                 # Would need to be async in real implementation
                 self.notify(f"Would create PR for {branch}")
+
+    def _get_selected_worker(self) -> dict | None:
+        """Get the currently selected worker from the table."""
+        table = self.query_one(WorkerTable)
+        if table.cursor_row is not None and 0 <= table.cursor_row < len(self.worker_list):
+            return self.worker_list[table.cursor_row]
+        return None
+
+    def action_show_details(self) -> None:
+        """Show detailed info for selected worker."""
+        worker = self._get_selected_worker()
+        if worker:
+            self.push_screen(WorkerDetailScreen(worker, view="info"))
+        else:
+            self.notify("No worker selected", severity="warning")
+
+    def action_show_logs(self) -> None:
+        """Show commit logs for selected worker."""
+        worker = self._get_selected_worker()
+        if worker:
+            self.push_screen(WorkerDetailScreen(worker, view="logs"))
+        else:
+            self.notify("No worker selected", severity="warning")
+
+    def action_show_diff(self) -> None:
+        """Show diff for selected worker."""
+        worker = self._get_selected_worker()
+        if worker:
+            self.push_screen(WorkerDetailScreen(worker, view="diff"))
+        else:
+            self.notify("No worker selected", severity="warning")
 
 
 def main():
