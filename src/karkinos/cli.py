@@ -18,10 +18,14 @@ def get_worktrees() -> list[dict]:
     if result.returncode != 0:
         return []
 
+    output = result.stdout.strip()
+    if not output:
+        return []
+
     worktrees = []
     current = {}
 
-    for line in result.stdout.strip().split("\n"):
+    for line in output.split("\n"):
         if line.startswith("worktree "):
             if current:
                 worktrees.append(current)
@@ -243,7 +247,8 @@ def cmd_cleanup(args):
         capture_output=True,
         text=True,
     )
-    merged = set(b.strip() for b in result.stdout.strip().split("\n"))
+    output = result.stdout.strip()
+    merged = set(b.strip() for b in output.split("\n")) if output else set()
 
     cleaned = 0
     for wt in workers:
