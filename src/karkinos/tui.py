@@ -226,6 +226,12 @@ class WorkerApp(App):
 
             table.add_row(path, branch, ahead, commit, status)
 
+        # Reset cursor to valid position after table rebuild
+        if table.row_count > 0:
+            table.move_cursor(row=min(table.cursor_row or 0, table.row_count - 1))
+        else:
+            table.move_cursor(row=0)
+
         # Update status bar
         status_bar = self.query_one(WorkerStatus)
         status_bar.update_stats(workers)
