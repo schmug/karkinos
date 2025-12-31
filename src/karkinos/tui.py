@@ -145,7 +145,13 @@ class WorkerApp(App):
             capture_output=True,
             text=True,
         )
-        wt["ahead"] = int(result.stdout.strip()) if result.returncode == 0 else 0
+        if result.returncode == 0:
+            try:
+                wt["ahead"] = int(result.stdout.strip())
+            except ValueError:
+                wt["ahead"] = 0
+        else:
+            wt["ahead"] = 0
 
         # Last commit
         result = subprocess.run(
@@ -222,14 +228,37 @@ class WorkerApp(App):
             capture_output=True,
             text=True,
         )
+        if result.returncode != 0:
+            self.notify("Failed to get merged branches", severity="error")
+            return
         merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
         cleaned = 0
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
-                subprocess.run(["git", "worktree", "remove", w["path"]])
-                subprocess.run(["git", "branch", "-d", branch])
+                result = subprocess.run(
+                    ["git", "worktree", "remove", w["path"]],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    self.notify(
+                        f"Failed to remove worktree: {w['path']}", severity="warning"
+                    )
+                    continue
+
+                result = subprocess.run(
+                    ["git", "branch", "-d", branch],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    self.notify(
+                        f"Failed to delete branch: {branch}", severity="warning"
+                    )
+                    continue
+
                 cleaned += 1
 
         self.refresh_workers()
