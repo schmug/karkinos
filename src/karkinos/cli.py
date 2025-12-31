@@ -117,6 +117,7 @@ def cmd_list(args):
 def cmd_watch(args):
     """Launch TUI to watch workers."""
     from karkinos.tui import WorkerApp
+
     app = WorkerApp()
     app.run()
 
@@ -129,6 +130,7 @@ def cmd_init(args):
 
     # Find karkinos package location
     import karkinos
+
     pkg_dir = Path(karkinos.__file__).parent.parent.parent
     src_skills = pkg_dir / "claude" / "skills"
     src_commands = pkg_dir / "claude" / "commands"
@@ -149,6 +151,7 @@ def cmd_init(args):
 
     # Copy skills
     import shutil
+
     for skill in src_skills.iterdir():
         if skill.is_dir():
             dest = skills_dir / skill.name
@@ -205,9 +208,28 @@ def cmd_cleanup(args):
             if args.dry_run:
                 print(f"Would remove: {wt['path']} ({branch})")
             else:
-                subprocess.run(["git", "worktree", "remove", wt["path"]])
-                subprocess.run(["git", "branch", "-d", branch])
-                print(f"Removed: {wt['path']} ({branch})")
+                result = subprocess.run(
+                    ["git", "worktree", "remove", wt["path"]],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    print(f"Warning: Failed to remove worktree {wt['path']}")
+                    if result.stderr:
+                        print(f"  {result.stderr.strip()}")
+                    continue
+                # Only delete branch if worktree removal succeeded
+                result = subprocess.run(
+                    ["git", "branch", "-d", branch],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    print(f"Warning: Failed to delete branch {branch}")
+                    if result.stderr:
+                        print(f"  {result.stderr.strip()}")
+                else:
+                    print(f"Removed: {wt['path']} ({branch})")
             cleaned += 1
 
     if cleaned == 0:
