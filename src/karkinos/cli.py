@@ -53,7 +53,10 @@ def get_commits_ahead(branch: str) -> int:
         text=True,
     )
     if result.returncode == 0:
-        return int(result.stdout.strip())
+        try:
+            return int(result.stdout.strip())
+        except ValueError:
+            return 0
     return 0
 
 
