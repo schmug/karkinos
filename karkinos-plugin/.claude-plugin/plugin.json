@@ -1,0 +1,16 @@
+{
+  "name": "karkinos",
+  "version": "0.1.0",
+  "description": "Parallel Claude worker management with git worktrees",
+  "author": {
+    "name": "Karkinos Contributors",
+    "url": "https://github.com/schmug/karkinos"
+  },
+  "homepage": "https://github.com/schmug/karkinos",
+  "repository": "https://github.com/schmug/karkinos",
+  "license": "MIT",
+  "keywords": ["workers", "git", "parallel", "worktrees", "orchestration"],
+  "commands": "./commands/",
+  "skills": "./skills/",
+  "mcpServers": "../.mcp.json"
+}
