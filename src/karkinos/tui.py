@@ -5,10 +5,10 @@ from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static
 from textual.timer import Timer
+from textual.widgets import DataTable, Footer, Header, Static
 
 
 class WorkerStatus(Static):
@@ -65,6 +65,23 @@ class WorkerApp(App):
         height: 100%;
     }
 
+    #empty-state {
+        display: none;
+        text-align: center;
+        padding: 2;
+        color: $text-muted;
+        height: 100%;
+        content-align: center middle;
+    }
+
+    .empty #worker-table {
+        display: none;
+    }
+
+    .empty #empty-state {
+        display: block;
+    }
+
     #help-text {
         dock: bottom;
         height: 1;
@@ -92,6 +109,10 @@ class WorkerApp(App):
         yield Container(
             WorkerStatus(id="status-bar"),
             WorkerTable(id="worker-table"),
+            Static(
+                "No active workers.\n\nUse /worker in Claude to start one.",
+                id="empty-state",
+            ),
             id="main-container",
         )
         yield Footer()
@@ -204,7 +225,13 @@ class WorkerApp(App):
 
         # Update table
         table = self.query_one(WorkerTable)
+        container = self.query_one("#main-container")
         table.clear()
+
+        if not workers:
+            container.add_class("empty")
+        else:
+            container.remove_class("empty")
 
         for w in workers:
             path = Path(w["path"]).name
@@ -252,9 +279,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to remove worktree: {w['path']}", severity="warning"
-                    )
+                    self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
                     continue
 
                 result = subprocess.run(
@@ -263,9 +288,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to delete branch: {branch}", severity="warning"
-                    )
+                    self.notify(f"Failed to delete branch: {branch}", severity="warning")
                     continue
 
                 cleaned += 1
