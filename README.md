@@ -141,6 +141,8 @@ karkinos watch --speed 0.2  # Faster crab animation (default: 0.4s)
 
 ## How Workers Operate
 
+> ⚠️ **Security Note**: Workers run with `--dangerously-skip-permissions`, giving them full autonomy to read/write files and run commands. They operate in isolated worktrees, but always review their changes before merging.
+
 Each worker:
 - Runs in an isolated git worktree
 - Has its own branch (no conflicts)
