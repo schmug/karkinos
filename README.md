@@ -1,6 +1,25 @@
 # Karkinos 🦀
 
-> *The crab that helps Claudes work in parallel*
+```
+            .----------------------------------------.
+           /  (\/)  (\/)    (\/)    (\/)    (\/)  (\/) \
+          /    \/    \/      \/      \/      \/    \/   \
+         |                                               |
+         |      (°)                           (°)        |
+         |                  KARKINOS                     |
+         |                                               |
+         |   (\/)     (\/)    __    (\/)     (\/)        |
+         |    \/       \/    /  \    \/       \/         |
+          \                 | <> |                      /
+           \                 \__/                      /
+            \           .-----------.                 /
+             \         /  (\/)(\/)   \               /
+              '-------'    \/  \/     '-------------'
+                            \  /
+                             \/
+```
+
+> *The multi-clawed abomination that helps Claudes work in parallel*
 
 Karkinos enables parallel Claude Code development using git worktrees. Spawn multiple Claude workers, each in their own isolated branch, and monitor their progress from a TUI.
 
@@ -130,6 +149,25 @@ The orchestrator (your main Claude session):
 In Greek mythology, Karkinos was a crab sent by Hera to help the Hydra fight Heracles. Though small, it tried to help - and was immortalized in the stars as the constellation Cancer.
 
 Like its namesake, Karkinos coordinates many small helpers (Claude workers) to tackle larger tasks.
+
+## The Mascot
+
+The Karkinos mascot is a **multi-clawed crab abomination** - multiple Claudes merged into a single eldritch crab creature.
+
+**Design Concept:**
+- A central crab body with Claude's coral/orange-colored eyes
+- Numerous claws extending in all directions (representing parallel workers)
+- Each claw is a mini "Clawed" (Claude pun intended)
+- Eldritch, slightly unsettling, but friendly
+- The `(\/)` symbols represent worker claws
+- The `(°)` eyes are Claude's signature orange/coral color
+
+**Image Generation Prompt:**
+> A friendly eldritch crab creature with multiple pairs of claws extending in all directions.
+> The crab has coral/orange glowing eyes. Each claw tip has a tiny pair of orange eyes,
+> representing worker Claudes. The creature has a slight glow and appears to be made of
+> code or terminal text. Style: cute horror, ASCII aesthetic, developer-friendly mascot.
+> Background: dark terminal green or transparent.
 
 ## License
 
