@@ -156,15 +156,18 @@ class WorkerApp(App):
         wt["last_commit"] = result.stdout.strip()[:50] if result.returncode == 0 else ""
 
         # Status
-        result = subprocess.run(
-            ["git", "-C", wt["path"], "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            wt["status"] = "modified" if result.stdout.strip() else "clean"
+        if not Path(wt["path"]).exists():
+            wt["status"] = "missing"
         else:
-            wt["status"] = "unknown"
+            result = subprocess.run(
+                ["git", "-C", wt["path"], "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                wt["status"] = "modified" if result.stdout.strip() else "clean"
+            else:
+                wt["status"] = "unknown"
 
         return wt
 
@@ -203,6 +206,8 @@ class WorkerApp(App):
                 status = "[green]clean[/]"
             elif status == "modified":
                 status = "[yellow]modified[/]"
+            elif status == "missing":
+                status = "[red]missing[/]"
 
             table.add_row(path, branch, ahead, commit, status)
 

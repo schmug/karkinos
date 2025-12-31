@@ -67,6 +67,8 @@ def get_last_commit(branch: str) -> str:
 
 def get_worktree_status(path: str) -> str:
     """Check if worktree has uncommitted changes."""
+    if not Path(path).exists():
+        return "missing"
     result = subprocess.run(
         ["git", "-C", path, "status", "--porcelain"],
         capture_output=True,
