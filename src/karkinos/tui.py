@@ -11,6 +11,18 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Static
 
 
+def get_default_branch() -> str:
+    """Detect the default branch dynamically from remote HEAD."""
+    result = subprocess.run(
+        ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip().replace("refs/remotes/origin/", "")
+    return "main"  # fallback
+
+
 class WorkerStatus(Static):
     """Widget showing summary status."""
 
@@ -144,13 +156,13 @@ class WorkerApp(App):
 
         return worktrees
 
-    def get_worker_details(self, wt: dict) -> dict:
+    def get_worker_details(self, wt: dict, default_branch: str) -> dict:
         """Enrich worktree with additional details."""
         branch = wt.get("branch", "")
 
-        # Commits ahead of main
+        # Commits ahead of default branch
         result = subprocess.run(
-            ["git", "rev-list", "--count", f"main..{branch}"],
+            ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
             capture_output=True,
             text=True,
         )
@@ -190,10 +202,11 @@ class WorkerApp(App):
         """Refresh the worker list."""
         worktrees = self.get_worktrees()
 
-        # Find main to exclude
+        # Find default branch to exclude
+        default_branch = get_default_branch()
         main_path = None
         for wt in worktrees:
-            if wt.get("branch") in ("main", "master"):
+            if wt.get("branch") == default_branch:
                 main_path = wt["path"]
                 break
 
@@ -201,7 +214,7 @@ class WorkerApp(App):
         workers = []
         for wt in worktrees:
             if wt["path"] != main_path and not wt.get("detached"):
-                workers.append(self.get_worker_details(wt))
+                workers.append(self.get_worker_details(wt, default_branch))
 
         self.worker_list = workers
 
@@ -243,8 +256,9 @@ class WorkerApp(App):
 
     def action_cleanup(self) -> None:
         """Clean up merged worktrees."""
+        default_branch = get_default_branch()
         result = subprocess.run(
-            ["git", "branch", "--merged", "main"],
+            ["git", "branch", "--merged", default_branch],
             capture_output=True,
             text=True,
         )
