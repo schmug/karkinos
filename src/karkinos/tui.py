@@ -1,14 +1,15 @@
 """Karkinos TUI - Monitor parallel Claude workers."""
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static
 from textual.timer import Timer
+from textual.widgets import DataTable, Footer, Header, Static
 
 
 class WorkerStatus(Static):
@@ -144,8 +145,28 @@ class WorkerApp(App):
 
         return worktrees
 
-    def get_worker_details(self, wt: dict) -> dict:
-        """Enrich worktree with additional details."""
+    def get_all_branch_details(self) -> dict[str, str]:
+        """Get last commit message for all branches."""
+        result = subprocess.run(
+            [
+                "git",
+                "for-each-ref",
+                "--format=%(refname:short)|%(subject)",
+                "refs/heads/",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        details = {}
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                if "|" in line:
+                    branch, subject = line.split("|", 1)
+                    details[branch] = subject
+        return details
+
+    def get_worker_status_and_ahead(self, wt: dict) -> dict:
+        """Enrich worktree with status and ahead count (expensive operations)."""
         branch = wt.get("branch", "")
 
         # Commits ahead of main
@@ -161,14 +182,6 @@ class WorkerApp(App):
                 wt["ahead"] = 0
         else:
             wt["ahead"] = 0
-
-        # Last commit
-        result = subprocess.run(
-            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
-            capture_output=True,
-            text=True,
-        )
-        wt["last_commit"] = result.stdout.strip()[:50] if result.returncode == 0 else ""
 
         # Status
         result = subprocess.run(
@@ -194,11 +207,21 @@ class WorkerApp(App):
                 main_path = wt["path"]
                 break
 
-        # Get workers with details
+        # Batch fetch commit messages
+        branch_commits = self.get_all_branch_details()
+
+        # Get workers
         workers = []
         for wt in worktrees:
             if wt["path"] != main_path and not wt.get("detached"):
-                workers.append(self.get_worker_details(wt))
+                # Enrich with last commit immediately
+                branch = wt.get("branch", "")
+                wt["last_commit"] = branch_commits.get(branch, "")[:50]
+                workers.append(wt)
+
+        # Parallelize expensive checks
+        with ThreadPoolExecutor() as executor:
+            workers = list(executor.map(self.get_worker_status_and_ahead, workers))
 
         self.worker_list = workers
 
