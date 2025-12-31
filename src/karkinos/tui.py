@@ -455,7 +455,7 @@ class WorkerApp(App):
     def on_mount(self) -> None:
         """Set up the table and start refresh timer."""
         table = self.query_one(WorkerTable)
-        table.add_columns("Worktree", "Branch", "Ahead", "Last Commit", "Activity", "Status")
+        table.add_columns("Worktree", "Branch", "Ahead", "Last Commit", "Changes", "Status")
 
         self.refresh_workers()
         self.refresh_timer = self.set_interval(5, self.refresh_workers)
