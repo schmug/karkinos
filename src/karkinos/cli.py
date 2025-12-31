@@ -116,33 +116,71 @@ def cmd_list(args):
 
 def cmd_watch(args):
     """Launch TUI to watch workers."""
-    from karkinos.tui import WorkerApp
+    if args.simple:
+        simple_watch()
+    else:
+        from karkinos.tui import WorkerApp
 
-    app = WorkerApp()
-    app.run()
+        app = WorkerApp()
+        app.run()
+
+
+def simple_watch():
+    """Simple text-based watch loop (no TUI, safe for shared terminals)."""
+    import time
+
+    try:
+        while True:
+            # Clear screen and move cursor to top
+            print("\033[2J\033[H", end="")
+            print(f"Karkinos Workers - {time.strftime('%H:%M:%S')}  (Ctrl+C to exit)")
+            print("-" * 85)
+
+            worktrees = get_worktrees()
+
+            # Find main worktree to exclude
+            main_path = None
+            for wt in worktrees:
+                if wt.get("branch") in ("main", "master"):
+                    main_path = wt["path"]
+                    break
+
+            workers = [wt for wt in worktrees if wt["path"] != main_path and not wt.get("detached")]
+
+            if not workers:
+                print("No active workers.")
+            else:
+                print(f"{'Worktree':<30} {'Branch':<35} {'Ahead':<6} {'Status':<10}")
+                print("-" * 85)
+
+                for wt in workers:
+                    path = Path(wt["path"]).name
+                    branch = wt.get("branch", "detached")
+                    ahead = get_commits_ahead(branch) if branch != "detached" else 0
+                    status = get_worktree_status(wt["path"])
+                    print(f"{path:<30} {branch:<35} +{ahead:<5} {status:<10}")
+
+            print("\nRefreshing every 5 seconds...")
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("\nStopped.")
 
 
 def cmd_init(args):
     """Initialize karkinos in a project."""
+    import shutil
+    from importlib.resources import as_file, files
+
     claude_dir = Path(".claude")
     skills_dir = claude_dir / "skills"
     commands_dir = claude_dir / "commands"
 
-    # Find karkinos package location
-    import karkinos
-
-    pkg_dir = Path(karkinos.__file__).parent.parent.parent
-    src_skills = pkg_dir / "claude" / "skills"
-    src_commands = pkg_dir / "claude" / "commands"
-
-    if not src_skills.exists():
-        # Try installed location
-        src_skills = pkg_dir.parent / "claude" / "skills"
-        src_commands = pkg_dir.parent / "claude" / "commands"
-
-    if not src_skills.exists():
-        print("Error: Could not find karkinos skills/commands.")
-        print("Try reinstalling: uv tool install karkinos")
+    # Access bundled data from package
+    try:
+        data_pkg = files("karkinos.data")
+    except ModuleNotFoundError:
+        print("Error: Could not find karkinos data package.")
+        print("Try reinstalling: uv tool install karkinos --force")
         sys.exit(1)
 
     # Create directories
@@ -150,26 +188,32 @@ def cmd_init(args):
     commands_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy skills
-    import shutil
-
-    for skill in src_skills.iterdir():
-        if skill.is_dir():
-            dest = skills_dir / skill.name
-            if dest.exists():
-                print(f"  Skipping {skill.name} (exists)")
-            else:
-                shutil.copytree(skill, dest)
-                print(f"  Added skill: {skill.name}")
+    with as_file(data_pkg / "skills") as src_skills:
+        if not src_skills.exists():
+            print("Error: Could not find skills in package.")
+            sys.exit(1)
+        for skill in src_skills.iterdir():
+            if skill.is_dir():
+                dest = skills_dir / skill.name
+                if dest.exists():
+                    print(f"  Skipping {skill.name} (exists)")
+                else:
+                    shutil.copytree(skill, dest)
+                    print(f"  Added skill: {skill.name}")
 
     # Copy commands
-    for cmd in src_commands.iterdir():
-        if cmd.is_file() and cmd.suffix == ".md":
-            dest = commands_dir / cmd.name
-            if dest.exists():
-                print(f"  Skipping {cmd.name} (exists)")
-            else:
-                shutil.copy(cmd, dest)
-                print(f"  Added command: {cmd.name}")
+    with as_file(data_pkg / "commands") as src_commands:
+        if not src_commands.exists():
+            print("Error: Could not find commands in package.")
+            sys.exit(1)
+        for cmd in src_commands.iterdir():
+            if cmd.is_file() and cmd.suffix == ".md":
+                dest = commands_dir / cmd.name
+                if dest.exists():
+                    print(f"  Skipping {cmd.name} (exists)")
+                else:
+                    shutil.copy(cmd, dest)
+                    print(f"  Added command: {cmd.name}")
 
     print("\nKarkinos initialized! Available commands:")
     print("  /worker, /issue-worker, /pr-worker, /workers, /worker-cleanup")
@@ -259,6 +303,12 @@ Examples:
 
     # watch
     watch_parser = subparsers.add_parser("watch", help="Launch TUI monitor")
+    watch_parser.add_argument(
+        "--simple",
+        "-s",
+        action="store_true",
+        help="Simple text output (no TUI, safe for shared terminals)",
+    )
     watch_parser.set_defaults(func=cmd_watch)
 
     # init

@@ -5,10 +5,10 @@ from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static
 from textual.timer import Timer
+from textual.widgets import DataTable, Footer, Header, Static
 
 
 class WorkerStatus(Static):
