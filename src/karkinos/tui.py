@@ -1,9 +1,11 @@
 """Karkinos TUI - Monitor parallel Claude workers."""
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
+from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Container, ScrollableContainer, Vertical
 from textual.reactive import reactive
@@ -430,7 +432,24 @@ class WorkerApp(App):
 
         return worktrees
 
-    def get_worker_details(self, wt: dict, default_branch: str) -> dict:
+    def get_all_branch_commits(self) -> dict[str, str]:
+        """Batch fetch all branch commit messages in one git call."""
+        result = subprocess.run(
+            ["git", "for-each-ref", "--format=%(refname:short)|%(subject)", "refs/heads/"],
+            capture_output=True,
+            text=True,
+        )
+        commits = {}
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                if "|" in line:
+                    branch, msg = line.split("|", 1)
+                    commits[branch] = msg
+        return commits
+
+    def get_worker_details(
+        self, wt: dict, default_branch: str, branch_commits: dict[str, str]
+    ) -> dict:
         """Enrich worktree with additional details."""
         branch = wt.get("branch", "")
 
@@ -448,13 +467,8 @@ class WorkerApp(App):
         else:
             wt["ahead"] = 0
 
-        # Last commit
-        result = subprocess.run(
-            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
-            capture_output=True,
-            text=True,
-        )
-        wt["last_commit"] = result.stdout.strip()[:50] if result.returncode == 0 else ""
+        # Last commit (from pre-fetched batch)
+        wt["last_commit"] = branch_commits.get(branch, "")[:50]
 
         # Status and activity
         if not Path(wt["path"]).exists():
@@ -482,8 +496,9 @@ class WorkerApp(App):
 
         return wt
 
+    @work(thread=True, exclusive=True)
     def refresh_workers(self) -> None:
-        """Refresh the worker list."""
+        """Refresh the worker list in a background thread."""
         worktrees = self.get_worktrees()
 
         # Find default branch to exclude
@@ -494,12 +509,28 @@ class WorkerApp(App):
                 main_path = wt["path"]
                 break
 
-        # Get workers with details
-        workers = []
-        for wt in worktrees:
-            if wt["path"] != main_path and not wt.get("detached"):
-                workers.append(self.get_worker_details(wt, default_branch))
+        # Batch fetch all commit messages in one git call
+        branch_commits = self.get_all_branch_commits()
 
+        # Filter to worker worktrees only
+        worker_worktrees = [
+            wt for wt in worktrees if wt["path"] != main_path and not wt.get("detached")
+        ]
+
+        # Parallelize per-worker status fetching
+        with ThreadPoolExecutor() as executor:
+            workers = list(
+                executor.map(
+                    lambda wt: self.get_worker_details(wt, default_branch, branch_commits),
+                    worker_worktrees,
+                )
+            )
+
+        # Schedule UI update on the main thread
+        self.call_from_thread(self._update_worker_table, workers)
+
+    def _update_worker_table(self, workers: list[dict]) -> None:
+        """Update the worker table UI (must be called from main thread)."""
         self.worker_list = workers
 
         # Update table
