@@ -31,7 +31,7 @@ Karkinos enables parallel Claude Code development using git worktrees. It spawns
 ### Source Structure
 
 - `src/karkinos/cli.py` - CLI entry point (`karkinos` command). Handles `list`, `watch`, `init`, `cleanup` subcommands. Uses subprocess for all git operations.
-- `src/karkinos/tui.py` - Textual-based TUI for monitoring workers. Auto-refreshes every 5 seconds. Keybindings: `r` refresh, `c` cleanup, `p` create PR, `q` quit.
+- `src/karkinos/tui.py` - Textual-based TUI for monitoring workers. Auto-refreshes every 5 seconds. Keybindings: `r` refresh, `c` cleanup, `p` create PR, `Enter` details, `l` logs, `d` diff, `q` quit. Supports `--no-crabs` and `--speed` flags for animation control.
 
 ### Claude Integration
 

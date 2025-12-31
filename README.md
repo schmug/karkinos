@@ -24,13 +24,14 @@
 Karkinos enables parallel Claude Code development using git worktrees. Spawn multiple Claude workers, each in their own isolated branch, and monitor their progress from a TUI.
 
 ```
-┌─ Karkinos Workers ───────────────────────────────────────────┐
-│ Worktree              │ Branch                │ Ahead │ Status │
-├───────────────────────┼───────────────────────┼───────┼────────┤
-│ myproject-issue-42    │ fix/issue-42-auth     │ +3    │ clean  │
-│ myproject-feat-api    │ feat/new-api          │ +1    │ modified│
-└──────────────────────────────────────────────────────────────┘
- Workers: 2  Total Commits: +4                Updated: 12:34:56
+(\/)(-_-)(\/)     KARKINOS Worker Monitor     (\/)(-_-)(\/)
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Worktree           │ Branch           │ Ahead │ Last Commit   │ Activity │
+├────────────────────┼──────────────────┼───────┼───────────────┼──────────┤
+│ myproject-issue-42 │ fix/issue-42     │ +3    │ fix auth bug  │ idle     │
+│ myproject-feat-api │ feat/new-api     │ +1    │ add endpoint  │ M api.py │
+└──────────────────────────────────────────────────────────────────────────┘
+ Workers: 2  Total Commits: +4                           Updated: 12:34:56
 ```
 
 ## How It Works
@@ -112,7 +113,18 @@ Then in Claude:
 | `karkinos init` | Add skills/commands to project |
 | `karkinos list` | List active workers |
 | `karkinos watch` | Launch TUI monitor |
+| `karkinos watch -s` | Simple text mode (no TUI) |
 | `karkinos cleanup` | Remove merged worktrees |
+| `karkinos cleanup --dry-run` | Preview what would be removed |
+
+#### Watch Command Options
+
+```bash
+karkinos watch              # Full TUI with animated crabs
+karkinos watch --simple     # Simple text mode (works in same terminal as Claude)
+karkinos watch --no-crabs   # TUI without crab animations
+karkinos watch --speed 0.2  # Faster crab animation (default: 0.4s)
+```
 
 ## TUI Keybindings
 
@@ -121,6 +133,9 @@ Then in Claude:
 | `r` | Refresh worker list |
 | `c` | Cleanup merged worktrees |
 | `p` | Create PR for selected worker |
+| `Enter` | Show worker details |
+| `l` | Show commit logs |
+| `d` | Show diff vs main |
 | `q` | Quit |
 
 ## How Workers Operate
