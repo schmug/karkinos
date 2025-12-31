@@ -121,6 +121,7 @@ Then in Claude:
 
 ```bash
 karkinos watch              # Full TUI with animated crabs
+karkinos watch --spawn      # Open in new terminal (splits in VS Code/Cursor)
 karkinos watch --simple     # Simple text mode (works in same terminal as Claude)
 karkinos watch --no-crabs   # TUI without crab animations
 karkinos watch --speed 0.2  # Faster crab animation (default: 0.4s)

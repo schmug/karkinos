@@ -1,6 +1,6 @@
 {
   "name": "karkinos",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Parallel Claude worker management with git worktrees",
   "author": {
     "name": "Karkinos Contributors",
