@@ -390,6 +390,92 @@ def create_pr(branch: str, title: str, body: str = "") -> dict:
     return {"success": True, "url": pr_result.stdout.strip()}
 
 
+def read_file(branch: str, file_path: str) -> dict:
+    """Read a file from a worker worktree.
+
+    Args:
+        branch: Git branch name of the worker
+        file_path: Path relative to worktree root
+
+    Returns:
+        Dict with file content or error message.
+    """
+    worktrees = get_worktrees()
+
+    # Find the worker by branch
+    worker = None
+    for wt in worktrees:
+        if wt.get("branch") == branch:
+            worker = wt
+            break
+
+    if not worker:
+        return {"error": f"Worker with branch '{branch}' not found"}
+
+    full_path = Path(worker["path"]) / file_path
+
+    if not full_path.exists():
+        return {"error": f"File not found: {file_path}"}
+
+    if not full_path.is_file():
+        return {"error": f"Not a file: {file_path}"}
+
+    try:
+        content = full_path.read_text()
+        return {
+            "branch": branch,
+            "path": str(full_path),
+            "relative_path": file_path,
+            "content": content,
+            "size": len(content),
+        }
+    except Exception as e:
+        return {"error": f"Failed to read file: {str(e)}"}
+
+
+def get_diff(branch: str, file_path: str | None = None) -> dict:
+    """Get full diff for a worker branch compared to main.
+
+    Args:
+        branch: Git branch name of the worker
+        file_path: Optional specific file to diff
+
+    Returns:
+        Dict with full diff content or error message.
+    """
+    worktrees = get_worktrees()
+    default_branch = get_default_branch()
+
+    # Find the worker by branch
+    worker = None
+    for wt in worktrees:
+        if wt.get("branch") == branch:
+            worker = wt
+            break
+
+    if not worker:
+        return {"error": f"Worker with branch '{branch}' not found"}
+
+    path = worker["path"]
+
+    cmd = ["git", "-C", path, "diff", f"{default_branch}...{branch}"]
+    if file_path:
+        cmd.append("--")
+        cmd.append(file_path)
+
+    diff_result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if diff_result.returncode != 0:
+        return {"error": f"Failed to get diff: {diff_result.stderr.strip()}"}
+
+    return {
+        "branch": branch,
+        "base": default_branch,
+        "file_path": file_path,
+        "diff": diff_result.stdout,
+    }
+
+
 # MCP Protocol Handler
 def handle_request(request: dict) -> dict:
     """Handle MCP requests."""
@@ -454,6 +540,30 @@ def handle_request(request: dict) -> dict:
                         "required": [],
                     },
                 },
+                {
+                    "name": "karkinos_read_file",
+                    "description": "Read a file from a worker worktree",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "branch": {"type": "string", "description": "The git branch name of the worker"},
+                            "file_path": {"type": "string", "description": "Path relative to worktree root"},
+                        },
+                        "required": ["branch", "file_path"],
+                    },
+                },
+                {
+                    "name": "karkinos_get_diff",
+                    "description": "Get full diff content for a worker branch compared to main",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "branch": {"type": "string", "description": "The git branch name of the worker"},
+                            "file_path": {"type": "string", "description": "Optional: specific file to diff"},
+                        },
+                        "required": ["branch"],
+                    },
+                },
             ]
         }
 
@@ -471,6 +581,10 @@ def handle_request(request: dict) -> dict:
             result = create_pr(args.get("branch", ""), args.get("title", ""), args.get("body", ""))
         elif tool_name == "karkinos_update_branches":
             result = update_branches(args.get("dry_run", True), args.get("use_rebase", True))
+        elif tool_name == "karkinos_read_file":
+            result = read_file(args.get("branch", ""), args.get("file_path", ""))
+        elif tool_name == "karkinos_get_diff":
+            result = get_diff(args.get("branch", ""), args.get("file_path"))
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
