@@ -1,6 +1,6 @@
 [project]
 name = "karkinos"
-version = "0.1.0"
+version = "0.2.0"
 description = "Parallel Claude Code workers using git worktrees"
 readme = "README.md"
 license = { text = "MIT" }

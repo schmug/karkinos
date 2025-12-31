@@ -140,6 +140,10 @@ def cmd_list(args):
 
 def cmd_watch(args):
     """Launch TUI to watch workers."""
+    if args.spawn:
+        spawn_watch_terminal(args)
+        return
+
     if args.simple:
         simple_watch()
     else:
@@ -150,6 +154,51 @@ def cmd_watch(args):
             animation_speed=args.speed,
         )
         app.run()
+
+
+def spawn_watch_terminal(args):
+    """Spawn karkinos watch in a new terminal window."""
+    import platform
+
+    # Build the command to run in new terminal
+    cmd_parts = ["karkinos", "watch"]
+    if args.no_crabs:
+        cmd_parts.append("--no-crabs")
+    if args.speed != 0.4:
+        cmd_parts.extend(["--speed", str(args.speed)])
+    cmd_str = " ".join(cmd_parts)
+
+    system = platform.system()
+
+    if system == "Darwin":  # macOS
+        # Use osascript to open Terminal.app with the command
+        script = f'''
+        tell application "Terminal"
+            activate
+            do script "{cmd_str}"
+        end tell
+        '''
+        subprocess.run(["osascript", "-e", script])
+        print(f"Opened Terminal with: {cmd_str}")
+
+    elif system == "Linux":
+        # Try common terminal emulators
+        terminals = [
+            ["gnome-terminal", "--", "bash", "-c", f"{cmd_str}; exec bash"],
+            ["xterm", "-e", cmd_str],
+            ["konsole", "-e", cmd_str],
+        ]
+        for term_cmd in terminals:
+            try:
+                subprocess.Popen(term_cmd, start_new_session=True)
+                print(f"Opened {term_cmd[0]} with: {cmd_str}")
+                return
+            except FileNotFoundError:
+                continue
+        print("No supported terminal found. Run manually: " + cmd_str)
+
+    else:
+        print(f"--spawn not supported on {system}. Run manually: {cmd_str}")
 
 
 def simple_watch():
@@ -337,6 +386,11 @@ Examples:
         "-s",
         action="store_true",
         help="Simple text output (no TUI, safe for shared terminals)",
+    )
+    watch_parser.add_argument(
+        "--spawn",
+        action="store_true",
+        help="Open TUI in a new terminal window",
     )
     watch_parser.add_argument(
         "--no-crabs",

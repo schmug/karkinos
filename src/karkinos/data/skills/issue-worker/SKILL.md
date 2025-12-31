@@ -132,3 +132,5 @@ Add to `.claude/workers.json`:
   "pr": "<pr-url>"
 }
 ```
+
+**Tip:** Run `karkinos watch` in another terminal to monitor worker progress, or use `karkinos watch --spawn` to open it automatically.

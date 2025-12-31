@@ -123,3 +123,5 @@ gh pr checks <number>  # Verify CI is running
 - Worker should NOT force push or amend existing commits
 - Always show diff before pushing
 - CI worker may need multiple iterations if fixes introduce new failures
+
+**Tip:** Run `karkinos watch` in another terminal to monitor worker progress, or use `karkinos watch --spawn` to open it automatically.

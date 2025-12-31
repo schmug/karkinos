@@ -89,3 +89,5 @@ After the worker completes:
 - Workers push their branch and create PRs when done
 - Use `git worktree list` to see active workers
 - Use `git worktree remove <path>` to clean up
+
+**Tip:** Run `karkinos watch` in another terminal to monitor worker progress in real-time, or use `karkinos watch --spawn` to open it automatically.
