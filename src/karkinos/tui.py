@@ -320,124 +320,66 @@ class CrabSprite:
 
 
 class CrabHeader(Static):
-    """ASCII crab header with multiple animated crabs walking across."""
+    """ASCII crab header with animated crabs walking across."""
 
-    # Center text that crabs should avoid
-    CENTER_TEXT = "KARKINOS Worker Monitor"
+    frame: reactive[int] = reactive(0)
 
-    tick: reactive[int] = reactive(0)
-
-    def __init__(self, **kwargs):
+    def __init__(self, animate: bool = True, speed: float = 0.4, **kwargs):
         super().__init__(**kwargs)
-        self.crabs: list[CrabSprite] = []
-        self.width = 80  # Default width, updated on mount
+        self.animate = animate
+        self.speed = speed
+        self.left_crab = CrabSprite(x=0, direction=1)
+        self.right_crab = CrabSprite(x=10, direction=-1)
 
     def on_mount(self) -> None:
-        """Initialize crabs and start animation timer."""
-        # Create 4 crabs at different positions with varying directions
-        self.crabs = [
-            CrabSprite(x=2, direction=1),
-            CrabSprite(x=8, direction=1),
-            CrabSprite(x=self.width - 15, direction=-1),
-            CrabSprite(x=self.width - 8, direction=-1),
-        ]
-        # Randomize initial expressions
-        for crab in self.crabs:
-            crab.expression = random.choice(CrabSprite.EXPRESSIONS)
-        # Start animation at 0.4 second intervals
-        self.set_interval(0.4, self._animate)
+        """Start the animation timer if enabled."""
+        if self.animate:
+            self.set_interval(self.speed, self._next_frame)
 
-    def _animate(self) -> None:
-        """Move all crabs and trigger re-render."""
-        # Calculate the protected zone for center text
-        center_text_width = len(self.CENTER_TEXT) + 4  # padding
-        center_start = (self.width - center_text_width) // 2
-        center_end = center_start + center_text_width
+    def _next_frame(self) -> None:
+        """Advance animation frame."""
+        # Move crabs with wider shuffle range
+        self.left_crab.move(0, 15)
+        self.right_crab.move(0, 15)
+        self.frame = (self.frame + 1) % 1000
 
-        crab_width = 15  # Approximate width of a crab
-
-        for crab in self.crabs:
-            # Calculate bounds based on which side of center the crab is on
-            if crab.x < center_start:
-                # Left side crab
-                crab.move(0, center_start - crab_width)
-            else:
-                # Right side crab
-                crab.move(center_end, self.width - crab_width)
-
-        self.tick += 1
-
-    def watch_tick(self) -> None:
-        """React to tick changes by refreshing the display."""
+    def watch_frame(self) -> None:
+        """React to frame changes by refreshing."""
         self.refresh()
 
     def render(self) -> str:
-        """Render the header with crabs and centered text."""
-        # Get actual width from container if available
+        """Render crabs with center text fixed, crabs move in side zones."""
+        center_rich = "[cyan]KARKINOS[/cyan] [bold cyan]Worker Monitor[/bold cyan]"
+
+        if not self.animate:
+            # Static header without crabs
+            return f"  🦀  {center_rich}  🦀  "
+
         try:
-            self.width = self.size.width or 80
+            width = self.size.width or 80
         except Exception:
-            self.width = 80
+            width = 80
 
-        # Place center text
-        center_text = "[cyan]KARKINOS[/cyan] [bold cyan]Worker Monitor[/bold cyan]"
-        plain_text = "KARKINOS Worker Monitor"
-        center_start = (self.width - len(plain_text)) // 2
+        center = "KARKINOS Worker Monitor"
 
-        # Place crabs (as position markers, we'll build final string differently)
-        crab_positions: list[tuple[int, str]] = []
-        for crab in self.crabs:
-            if 0 <= crab.x < self.width:
-                crab_positions.append((crab.x, crab.render()))
+        # Calculate zones: |--left zone--|--center--|--right zone--|
+        center_start = (width - len(center)) // 2
+        zone_width = center_start - 2  # Leave 2 char padding
 
-        # Sort by position for proper rendering
-        crab_positions.sort(key=lambda x: x[0])
+        # Build left zone with crab
+        left_crab_str = self.left_crab.render()
+        left_pos = min(self.left_crab.x, zone_width - len(left_crab_str))
+        left_zone = " " * left_pos + f"[bold orange1]{left_crab_str}[/]"
+        left_zone += " " * (zone_width - left_pos - len(left_crab_str))
 
-        # Build the output string with Rich markup
-        # We'll construct segments: crabs on left, center text, crabs on right
-        left_crabs = []
-        right_crabs = []
-        center_end = center_start + len(plain_text)
+        # Build right zone with crab
+        right_crab_str = self.right_crab.render()
+        right_pos = min(self.right_crab.x, zone_width - len(right_crab_str))
+        right_zone = " " * (zone_width - right_pos - len(right_crab_str))
+        right_zone += f"[bold orange1]{right_crab_str}[/]"
+        right_zone += " " * right_pos
 
-        for pos, crab_str in crab_positions:
-            if pos < center_start:
-                left_crabs.append((pos, crab_str))
-            else:
-                right_crabs.append((pos, crab_str))
-
-        # Build left section
-        left_section = ""
-        for pos, crab_str in left_crabs:
-            padding = pos - len(left_section.replace("[bold orange1]", "").replace("[/]", ""))
-            if padding > 0:
-                left_section += " " * padding
-            left_section += f"[bold orange1]{crab_str}[/]"
-
-        # Pad to center
-        left_plain_len = len(
-            left_section.replace("[bold orange1]", "")
-            .replace("[/]", "")
-            .replace("[bold cyan]", "")
-            .replace("[cyan]", "")
-        )
-        center_padding = center_start - left_plain_len
-        if center_padding > 0:
-            left_section += " " * center_padding
-
-        # Build right section
-        right_section = ""
-        right_start_pos = center_end
-        for pos, crab_str in right_crabs:
-            padding = (
-                pos
-                - right_start_pos
-                - len(right_section.replace("[bold orange1]", "").replace("[/]", ""))
-            )
-            if padding > 0:
-                right_section += " " * padding
-            right_section += f"[bold orange1]{crab_str}[/]"
-
-        return f"{left_section}{center_text}{right_section}"
+        return f"{left_zone}  {center_rich}  {right_zone}"
 
 
 class WorkerApp(App):
@@ -495,12 +437,14 @@ class WorkerApp(App):
 
     worker_list: reactive[list[dict]] = reactive([])
 
-    def __init__(self):
+    def __init__(self, show_crabs: bool = True, animation_speed: float = 0.4):
         super().__init__()
+        self.show_crabs = show_crabs
+        self.animation_speed = animation_speed
         self.refresh_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
-        yield CrabHeader()
+        yield CrabHeader(animate=self.show_crabs, speed=self.animation_speed)
         yield Container(
             WorkerStatus(id="status-bar"),
             WorkerTable(id="worker-table"),

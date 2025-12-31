@@ -145,7 +145,10 @@ def cmd_watch(args):
     else:
         from karkinos.tui import WorkerApp
 
-        app = WorkerApp()
+        app = WorkerApp(
+            show_crabs=not args.no_crabs,
+            animation_speed=args.speed,
+        )
         app.run()
 
 
@@ -334,6 +337,17 @@ Examples:
         "-s",
         action="store_true",
         help="Simple text output (no TUI, safe for shared terminals)",
+    )
+    watch_parser.add_argument(
+        "--no-crabs",
+        action="store_true",
+        help="Disable animated crabs in header",
+    )
+    watch_parser.add_argument(
+        "--speed",
+        type=float,
+        default=0.4,
+        help="Animation speed in seconds (default: 0.4)",
     )
     watch_parser.set_defaults(func=cmd_watch)
 
