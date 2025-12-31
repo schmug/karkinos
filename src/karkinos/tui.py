@@ -8,7 +8,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.reactive import reactive
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Footer, Static
 
 
 def get_default_branch() -> str:
@@ -53,12 +53,33 @@ class WorkerTable(DataTable):
         self.zebra_stripes = True
 
 
+class CrabHeader(Static):
+    """ASCII crab header for Karkinos."""
+
+    def render(self) -> str:
+        return (
+            "[bold orange1](\\/) [cyan]KARKINOS[/cyan] (\\/)  "
+            "[bold cyan]Worker Monitor[/bold cyan]  "
+            "[bold orange1](°°)[/bold orange1]"
+        )
+
+
 class WorkerApp(App):
     """TUI application for monitoring Claude workers."""
+
+    TITLE = "🦀 Karkinos"
 
     CSS = """
     Screen {
         background: $surface;
+    }
+
+    CrabHeader {
+        dock: top;
+        height: 1;
+        padding: 0 1;
+        background: $primary-background;
+        text-align: center;
     }
 
     #status-bar {
@@ -100,7 +121,7 @@ class WorkerApp(App):
         self.refresh_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield CrabHeader()
         yield Container(
             WorkerStatus(id="status-bar"),
             WorkerTable(id="worker-table"),
@@ -277,9 +298,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to remove worktree: {w['path']}", severity="warning"
-                    )
+                    self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
                     continue
 
                 result = subprocess.run(
@@ -288,9 +307,7 @@ class WorkerApp(App):
                     text=True,
                 )
                 if result.returncode != 0:
-                    self.notify(
-                        f"Failed to delete branch: {branch}", severity="warning"
-                    )
+                    self.notify(f"Failed to delete branch: {branch}", severity="warning")
                     continue
 
                 cleaned += 1
