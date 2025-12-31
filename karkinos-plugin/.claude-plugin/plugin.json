@@ -12,5 +12,5 @@
   "keywords": ["workers", "git", "parallel", "worktrees", "orchestration"],
   "commands": "./commands/",
   "skills": "./skills/",
-  "mcpServers": "../.mcp.json"
+  "mcpServers": "./mcp.json"
 }

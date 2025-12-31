@@ -484,14 +484,15 @@ def handle_request(request: dict) -> dict:
 
     if method == "initialize":
         return {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "karkinos", "version": "0.1.0"},
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "karkinos", "version": "0.1.0"},
+            }
         }
 
     elif method == "tools/list":
-        return {
-            "tools": [
+        return {"result": {"tools": [
                 {
                     "name": "karkinos_list_workers",
                     "description": "List all active git worktrees with status (branch, commits ahead, clean/modified)",
@@ -565,7 +566,7 @@ def handle_request(request: dict) -> dict:
                     },
                 },
             ]
-        }
+        }}
 
     elif method == "tools/call":
         tool_name = params.get("name", "")
@@ -588,9 +589,9 @@ def handle_request(request: dict) -> dict:
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        return {"result": {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}}
 
-    return {"error": f"Unknown method: {method}"}
+    return {"error": {"code": -32601, "message": f"Unknown method: {method}"}}
 
 
 def main():
