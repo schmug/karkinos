@@ -81,7 +81,7 @@ class WorkerApp(App):
         ("p", "create_pr", "Create PR"),
     ]
 
-    workers: reactive[list[dict]] = reactive([])
+    worker_list: reactive[list[dict]] = reactive([])
 
     def __init__(self):
         super().__init__()
@@ -185,7 +185,7 @@ class WorkerApp(App):
             if wt["path"] != main_path and not wt.get("detached"):
                 workers.append(self.get_worker_details(wt))
 
-        self.workers = workers
+        self.worker_list = workers
 
         # Update table
         table = self.query_one(WorkerTable)
@@ -225,7 +225,7 @@ class WorkerApp(App):
         merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
         cleaned = 0
-        for w in self.workers:
+        for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
                 subprocess.run(["git", "worktree", "remove", w["path"]])
@@ -238,8 +238,8 @@ class WorkerApp(App):
     def action_create_pr(self) -> None:
         """Create PR for selected worker."""
         table = self.query_one(WorkerTable)
-        if table.cursor_row is not None and self.workers:
-            worker = self.workers[table.cursor_row]
+        if table.cursor_row is not None and self.worker_list:
+            worker = self.worker_list[table.cursor_row]
             branch = worker.get("branch")
             if branch:
                 # Would need to be async in real implementation
