@@ -279,13 +279,38 @@ class WorkerTable(DataTable):
 
 
 class CrabHeader(Static):
-    """ASCII crab header for Karkinos."""
+    """ASCII crab header for Karkinos with animated eyes."""
+
+    # Animation frames: (claws, eyes)
+    FRAMES = [
+        ("(\\/)", "(°°)"),  # Open eyes, claws up
+        ("(\\/)", "(••)"),  # Blink
+        ("(\\/)", "(°°)"),  # Open eyes
+        ("(\\\\)", "(°°)"),  # Claws move left
+        ("(\\/)", "(°°)"),  # Claws back
+        ("(//)", "(°°)"),  # Claws move right
+    ]
+
+    frame_index: reactive[int] = reactive(0)
+
+    def on_mount(self) -> None:
+        """Start the animation timer."""
+        self.set_interval(1.5, self._next_frame)
+
+    def _next_frame(self) -> None:
+        """Advance to the next animation frame."""
+        self.frame_index = (self.frame_index + 1) % len(self.FRAMES)
+
+    def watch_frame_index(self) -> None:
+        """React to frame changes by refreshing the display."""
+        self.refresh()
 
     def render(self) -> str:
+        claws, eyes = self.FRAMES[self.frame_index]
         return (
-            "[bold orange1](\\/) [cyan]KARKINOS[/cyan] (\\/)  "
-            "[bold cyan]Worker Monitor[/bold cyan]  "
-            "[bold orange1](°°)[/bold orange1]"
+            f"[bold orange1]{claws} [cyan]KARKINOS[/cyan] {claws}  "
+            f"[bold cyan]Worker Monitor[/bold cyan]  "
+            f"[bold orange1]{eyes}[/bold orange1]"
         )
 
 
