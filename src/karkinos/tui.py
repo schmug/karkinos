@@ -385,7 +385,7 @@ class WorkerApp(App):
     def on_mount(self) -> None:
         """Set up the table and start refresh timer."""
         table = self.query_one(WorkerTable)
-        table.add_columns("Worktree", "Branch", "Ahead", "Last Commit", "Status")
+        table.add_columns("Worktree", "Branch", "Ahead", "Last Commit", "Activity", "Status")
 
         self.refresh_workers()
         self.refresh_timer = self.set_interval(5, self.refresh_workers)
@@ -456,9 +456,10 @@ class WorkerApp(App):
         )
         wt["last_commit"] = result.stdout.strip()[:50] if result.returncode == 0 else ""
 
-        # Status
+        # Status and activity
         if not Path(wt["path"]).exists():
             wt["status"] = "missing"
+            wt["activity"] = ""
         else:
             result = subprocess.run(
                 ["git", "-C", wt["path"], "status", "--porcelain"],
@@ -466,9 +467,18 @@ class WorkerApp(App):
                 text=True,
             )
             if result.returncode == 0:
-                wt["status"] = "modified" if result.stdout.strip() else "clean"
+                status_output = result.stdout.strip()
+                wt["status"] = "modified" if status_output else "clean"
+                # Extract activity from first changed file
+                if status_output:
+                    first_line = status_output.split("\n")[0]
+                    # Format: "XY filename" where XY is the status code
+                    wt["activity"] = first_line[:30]
+                else:
+                    wt["activity"] = "idle"
             else:
                 wt["status"] = "unknown"
+                wt["activity"] = ""
 
         return wt
 
@@ -501,7 +511,18 @@ class WorkerApp(App):
             branch = w.get("branch", "?")
             ahead = f"+{w.get('ahead', 0)}"
             commit = w.get("last_commit", "")[:40]
+            activity = w.get("activity", "")
             status = w.get("status", "?")
+
+            # Color activity based on git status prefix
+            if activity.startswith("M"):
+                activity = f"[yellow]{activity}[/]"
+            elif activity.startswith("A") or activity.startswith("??"):
+                activity = f"[green]{activity}[/]"
+            elif activity.startswith("D"):
+                activity = f"[red]{activity}[/]"
+            elif activity == "idle":
+                activity = "[dim]idle[/]"
 
             # Color status
             if status == "clean":
@@ -511,7 +532,7 @@ class WorkerApp(App):
             elif status == "missing":
                 status = "[red]missing[/]"
 
-            table.add_row(path, branch, ahead, commit, status)
+            table.add_row(path, branch, ahead, commit, activity, status)
 
         # Reset cursor to valid position after table rebuild
         if table.row_count > 0:
