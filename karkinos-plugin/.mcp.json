@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "karkinos": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/servers/karkinos-mcp/server.py"],
+      "env": {
+        "PROJECT_ROOT": "${PROJECT_ROOT}"
+      }
+    }
+  }
+}

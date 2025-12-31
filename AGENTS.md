@@ -16,10 +16,13 @@ ruff format src/
 
 # Run the CLI
 karkinos list          # List active workers
-karkinos watch         # Launch TUI monitor
+karkinos watch         # Launch TUI monitor (requires separate terminal)
+karkinos watch -s      # Simple text mode (works in same terminal as Claude Code)
 karkinos init          # Add skills/commands to current project
 karkinos cleanup       # Remove merged worktrees (--dry-run to preview)
 ```
+
+**Note:** The TUI (`karkinos watch`) must run in a separate terminal from Claude Code due to terminal escape sequence conflicts. Use `karkinos watch --simple` for text-only output that works in the same terminal.
 
 ## Architecture
 
@@ -32,8 +35,8 @@ Karkinos enables parallel Claude Code development using git worktrees. It spawns
 
 ### Claude Integration
 
-- `claude/commands/*.md` - Slash command definitions (`/worker`, `/workers`, `/issue-worker`, `/pr-worker`, `/worker-cleanup`)
-- `claude/skills/*/SKILL.md` - Skill implementations that get copied to projects via `karkinos init`
+- `src/karkinos/data/commands/*.md` - Slash command definitions (bundled, copied to `.claude/commands/` via `karkinos init`)
+- `src/karkinos/data/skills/*/SKILL.md` - Skill implementations (bundled, copied to `.claude/skills/` via `karkinos init`)
 
 ### Key Patterns
 
