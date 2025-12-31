@@ -7,6 +7,18 @@ import sys
 from pathlib import Path
 
 
+def get_default_branch() -> str:
+    """Detect the default branch dynamically from remote HEAD."""
+    result = subprocess.run(
+        ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip().replace("refs/remotes/origin/", "")
+    return "main"  # fallback
+
+
 def get_worktrees() -> list[dict]:
     """Get list of git worktrees with their status."""
     result = subprocess.run(
@@ -45,10 +57,12 @@ def get_worktrees() -> list[dict]:
     return worktrees
 
 
-def get_commits_ahead(branch: str) -> int:
-    """Get number of commits ahead of main."""
+def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
+    """Get number of commits ahead of default branch."""
+    if default_branch is None:
+        default_branch = get_default_branch()
     result = subprocess.run(
-        ["git", "rev-list", "--count", f"main..{branch}"],
+        ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
         capture_output=True,
         text=True,
     )
@@ -96,10 +110,11 @@ def cmd_list(args):
         print("No worktrees found.")
         return
 
-    # Find main worktree to exclude
+    # Find default branch worktree to exclude
+    default_branch = get_default_branch()
     main_path = None
     for wt in worktrees:
-        if wt.get("branch") in ("main", "master"):
+        if wt.get("branch") == default_branch:
             main_path = wt["path"]
             break
 
@@ -233,10 +248,11 @@ def cmd_cleanup(args):
     """Clean up merged worktrees."""
     worktrees = get_worktrees()
 
-    # Find main
+    # Find default branch
+    default_branch = get_default_branch()
     main_path = None
     for wt in worktrees:
-        if wt.get("branch") in ("main", "master"):
+        if wt.get("branch") == default_branch:
             main_path = wt["path"]
             break
 
@@ -248,7 +264,7 @@ def cmd_cleanup(args):
 
     # Check which are merged
     result = subprocess.run(
-        ["git", "branch", "--merged", "main"],
+        ["git", "branch", "--merged", default_branch],
         capture_output=True,
         text=True,
     )
