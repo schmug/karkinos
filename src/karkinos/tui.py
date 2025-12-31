@@ -120,12 +120,16 @@ class WorkerApp(App):
         if result.returncode != 0:
             return []
 
+        output = result.stdout.strip()
+        if not output:
+            return []
+
         worktrees = []
         current = {}
 
-        for line in result.stdout.strip().split("\n"):
+        for line in output.split("\n"):
             if line.startswith("worktree "):
-                if current:
+                if current and "path" in current:
                     worktrees.append(current)
                 current = {"path": line[9:]}
             elif line.startswith("HEAD "):
@@ -135,7 +139,7 @@ class WorkerApp(App):
             elif line == "detached":
                 current["detached"] = True
 
-        if current:
+        if current and "path" in current:
             worktrees.append(current)
 
         return worktrees
