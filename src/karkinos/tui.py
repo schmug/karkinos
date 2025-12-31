@@ -570,13 +570,14 @@ class WorkerApp(App):
 
     def action_create_pr(self) -> None:
         """Create PR for selected worker."""
-        table = self.query_one(WorkerTable)
-        if table.cursor_row is not None and self.worker_list:
-            worker = self.worker_list[table.cursor_row]
+        worker = self._get_selected_worker()
+        if worker:
             branch = worker.get("branch")
             if branch:
                 # Would need to be async in real implementation
                 self.notify(f"Would create PR for {branch}")
+        else:
+            self.notify("No worker selected", severity="warning")
 
     def _get_selected_worker(self) -> dict | None:
         """Get the currently selected worker from the table."""
