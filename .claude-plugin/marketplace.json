@@ -1,0 +1,19 @@
+{
+  "name": "karkinos",
+  "owner": {
+    "name": "schmug"
+  },
+  "metadata": {
+    "description": "Parallel Claude Code development with git worktrees",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "karkinos",
+      "source": "./karkinos-plugin",
+      "description": "Parallel Claude workers with git worktrees - includes MCP tools, skills, and commands",
+      "version": "0.1.0",
+      "category": "development"
+    }
+  ]
+}
