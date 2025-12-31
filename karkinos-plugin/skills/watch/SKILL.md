@@ -51,6 +51,9 @@ Then run: karkinos watch --spawn
 ## Notes
 
 - The TUI must run in a separate terminal from Claude Code
-- Use `--spawn` to automatically open a new terminal window
+- Use `--spawn` to automatically open a new terminal:
+  - **VS Code/Cursor**: Splits the current terminal pane
+  - **Terminal.app**: Opens a new window
+  - **Linux**: Opens gnome-terminal, xterm, or konsole
 - Use `--no-crabs` to disable the animated crab header
 - Use `--speed 0.2` for faster animation

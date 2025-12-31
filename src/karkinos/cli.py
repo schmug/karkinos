@@ -157,7 +157,8 @@ def cmd_watch(args):
 
 
 def spawn_watch_terminal(args):
-    """Spawn karkinos watch in a new terminal window."""
+    """Spawn karkinos watch in a new terminal window or IDE split."""
+    import os
     import platform
 
     # Build the command to run in new terminal
@@ -170,16 +171,42 @@ def spawn_watch_terminal(args):
 
     system = platform.system()
 
-    if system == "Darwin":  # macOS
-        # Use osascript to open Terminal.app with the command
+    # Detect VS Code / Cursor IDE
+    term_program = os.environ.get("TERM_PROGRAM", "")
+    vscode_detected = (
+        term_program == "vscode"
+        or "VSCODE_" in "".join(os.environ.keys())
+        or os.environ.get("TERM_PROGRAM_VERSION", "").startswith("1.")  # VS Code versions
+    )
+
+    if vscode_detected and system == "Darwin":
+        # Split terminal in VS Code/Cursor using AppleScript
+        app_name = "Cursor" if "cursor" in os.environ.get("__CFBundleIdentifier", "").lower() else "Code"
         script = f'''
-        tell application "Terminal"
-            activate
-            do script "{cmd_str}"
+        tell application "System Events"
+            tell process "{app_name}"
+                -- Split terminal: Cmd+Shift+5 or use menu
+                keystroke "5" using {{command down, shift down}}
+                delay 0.3
+                -- Type the command
+                keystroke "{cmd_str}"
+                delay 0.1
+                -- Press Enter
+                key code 36
+            end tell
         end tell
         '''
-        subprocess.run(["osascript", "-e", script])
-        print(f"Opened Terminal with: {cmd_str}")
+        result = subprocess.run(["osascript", "-e", script], capture_output=True)
+        if result.returncode == 0:
+            print(f"Split terminal with: {cmd_str}")
+        else:
+            # Fallback to new terminal if split fails
+            print("Could not split terminal, opening new window...")
+            _open_macos_terminal(cmd_str)
+        return
+
+    if system == "Darwin":  # macOS
+        _open_macos_terminal(cmd_str)
 
     elif system == "Linux":
         # Try common terminal emulators
@@ -199,6 +226,18 @@ def spawn_watch_terminal(args):
 
     else:
         print(f"--spawn not supported on {system}. Run manually: {cmd_str}")
+
+
+def _open_macos_terminal(cmd_str: str):
+    """Open a new Terminal.app window with the given command."""
+    script = f'''
+    tell application "Terminal"
+        activate
+        do script "{cmd_str}"
+    end tell
+    '''
+    subprocess.run(["osascript", "-e", script])
+    print(f"Opened Terminal with: {cmd_str}")
 
 
 def simple_watch():
