@@ -104,6 +104,11 @@ class WorkerApp(App):
         self.refresh_workers()
         self.refresh_timer = self.set_interval(5, self.refresh_workers)
 
+    def on_unmount(self) -> None:
+        """Cancel refresh timer on shutdown."""
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+
     def get_worktrees(self) -> list[dict]:
         """Get list of git worktrees with status."""
         result = subprocess.run(
