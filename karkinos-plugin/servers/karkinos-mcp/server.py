@@ -108,13 +108,17 @@ def list_workers() -> dict:
             continue
 
         branch = wt.get("branch", "detached")
-        workers.append({
-            "path": wt["path"],
-            "name": Path(wt["path"]).name,
-            "branch": branch,
-            "commits_ahead": get_commits_ahead(branch, default_branch) if branch != "detached" else 0,
-            "status": get_worktree_status(wt["path"]),
-        })
+        workers.append(
+            {
+                "path": wt["path"],
+                "name": Path(wt["path"]).name,
+                "branch": branch,
+                "commits_ahead": get_commits_ahead(branch, default_branch)
+                if branch != "detached"
+                else 0,
+                "status": get_worktree_status(wt["path"]),
+            }
+        )
 
     return {"workers": workers, "count": len(workers)}
 
@@ -204,7 +208,9 @@ def cleanup_workers(dry_run: bool = True) -> dict:
                     subprocess.run(["git", "branch", "-d", branch], capture_output=True)
                     cleaned.append({"path": wt["path"], "branch": branch, "action": "removed"})
                 else:
-                    failed.append({"path": wt["path"], "branch": branch, "error": result.stderr.strip()})
+                    failed.append(
+                        {"path": wt["path"], "branch": branch, "error": result.stderr.strip()}
+                    )
 
     return {"cleaned": cleaned, "failed": failed, "dry_run": dry_run}
 
@@ -254,21 +260,25 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
         path = wt["path"]
 
         if not Path(path).exists():
-            results["failed"].append({
-                "branch": branch,
-                "path": path,
-                "error": "Worktree path does not exist",
-            })
+            results["failed"].append(
+                {
+                    "branch": branch,
+                    "path": path,
+                    "error": "Worktree path does not exist",
+                }
+            )
             continue
 
         # Check if worktree has uncommitted changes
         status = get_worktree_status(path)
         if status == "modified":
-            results["failed"].append({
-                "branch": branch,
-                "path": path,
-                "error": "Worktree has uncommitted changes - commit or stash first",
-            })
+            results["failed"].append(
+                {
+                    "branch": branch,
+                    "path": path,
+                    "error": "Worktree has uncommitted changes - commit or stash first",
+                }
+            )
             continue
 
         # Check if branch needs updating by comparing with origin/main
@@ -289,10 +299,12 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
             origin_main = origin_main_result.stdout.strip()
 
             if merge_base == origin_main:
-                results["already_up_to_date"].append({
-                    "branch": branch,
-                    "path": path,
-                })
+                results["already_up_to_date"].append(
+                    {
+                        "branch": branch,
+                        "path": path,
+                    }
+                )
                 continue
 
         if dry_run:
@@ -300,23 +312,35 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
             if use_rebase:
                 # Check if rebase would have conflicts by doing a dry-run rebase
                 test_result = subprocess.run(
-                    ["git", "-C", path, "rebase", "--no-autostash", f"origin/{default_branch}", "--dry-run"],
+                    [
+                        "git",
+                        "-C",
+                        path,
+                        "rebase",
+                        "--no-autostash",
+                        f"origin/{default_branch}",
+                        "--dry-run",
+                    ],
                     capture_output=True,
                     text=True,
                 )
                 # Note: git rebase doesn't have a true --dry-run, so we estimate
                 # Just report it would be updated
-                results["updated"].append({
-                    "branch": branch,
-                    "path": path,
-                    "action": "would_rebase",
-                })
+                results["updated"].append(
+                    {
+                        "branch": branch,
+                        "path": path,
+                        "action": "would_rebase",
+                    }
+                )
             else:
-                results["updated"].append({
-                    "branch": branch,
-                    "path": path,
-                    "action": "would_merge",
-                })
+                results["updated"].append(
+                    {
+                        "branch": branch,
+                        "path": path,
+                        "action": "would_merge",
+                    }
+                )
         else:
             # Actually perform the update
             if use_rebase:
@@ -327,17 +351,27 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
                 )
             else:
                 update_result = subprocess.run(
-                    ["git", "-C", path, "merge", f"origin/{default_branch}", "-m", f"Merge {default_branch} into {branch}"],
+                    [
+                        "git",
+                        "-C",
+                        path,
+                        "merge",
+                        f"origin/{default_branch}",
+                        "-m",
+                        f"Merge {default_branch} into {branch}",
+                    ],
                     capture_output=True,
                     text=True,
                 )
 
             if update_result.returncode == 0:
-                results["updated"].append({
-                    "branch": branch,
-                    "path": path,
-                    "action": "rebased" if use_rebase else "merged",
-                })
+                results["updated"].append(
+                    {
+                        "branch": branch,
+                        "path": path,
+                        "action": "rebased" if use_rebase else "merged",
+                    }
+                )
             else:
                 # Check if it's a conflict
                 stderr = update_result.stderr.strip()
@@ -346,27 +380,40 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
                 if "CONFLICT" in stderr or "CONFLICT" in stdout or "conflict" in stderr.lower():
                     # Abort the failed operation
                     if use_rebase:
-                        subprocess.run(["git", "-C", path, "rebase", "--abort"], capture_output=True)
+                        subprocess.run(
+                            ["git", "-C", path, "rebase", "--abort"], capture_output=True
+                        )
                     else:
                         subprocess.run(["git", "-C", path, "merge", "--abort"], capture_output=True)
 
-                    results["conflicts"].append({
-                        "branch": branch,
-                        "path": path,
-                        "error": stderr or stdout,
-                    })
+                    results["conflicts"].append(
+                        {
+                            "branch": branch,
+                            "path": path,
+                            "error": stderr or stdout,
+                        }
+                    )
                 else:
-                    results["failed"].append({
-                        "branch": branch,
-                        "path": path,
-                        "error": stderr or stdout or "Unknown error",
-                    })
+                    results["failed"].append(
+                        {
+                            "branch": branch,
+                            "path": path,
+                            "error": stderr or stdout or "Unknown error",
+                        }
+                    )
 
     return results
 
 
-def create_pr(branch: str, title: str, body: str = "") -> dict:
-    """Create a pull request for a worker branch."""
+def create_pr(branch: str, title: str, body: str = "", auto_merge: bool = True) -> dict:
+    """Create a pull request for a worker branch.
+
+    Args:
+        branch: The git branch name to create PR for
+        title: PR title
+        body: PR description
+        auto_merge: Enable auto-merge when CI passes (default: True)
+    """
     # First push the branch
     push_result = subprocess.run(
         ["git", "push", "-u", "origin", branch],
@@ -379,7 +426,17 @@ def create_pr(branch: str, title: str, body: str = "") -> dict:
 
     # Create PR
     pr_result = subprocess.run(
-        ["gh", "pr", "create", "--head", branch, "--title", title, "--body", body or "Created by Karkinos"],
+        [
+            "gh",
+            "pr",
+            "create",
+            "--head",
+            branch,
+            "--title",
+            title,
+            "--body",
+            body or "Created by Karkinos",
+        ],
         capture_output=True,
         text=True,
     )
@@ -387,7 +444,25 @@ def create_pr(branch: str, title: str, body: str = "") -> dict:
     if pr_result.returncode != 0:
         return {"error": f"Failed to create PR: {pr_result.stderr.strip()}"}
 
-    return {"success": True, "url": pr_result.stdout.strip()}
+    pr_url = pr_result.stdout.strip()
+
+    # Enable auto-merge if requested
+    auto_merge_result = None
+    if auto_merge:
+        # Extract PR number from URL (e.g., https://github.com/owner/repo/pull/123)
+        pr_number = pr_url.rstrip("/").split("/")[-1]
+        merge_result = subprocess.run(
+            ["gh", "pr", "merge", pr_number, "--auto", "--squash"],
+            capture_output=True,
+            text=True,
+        )
+        if merge_result.returncode != 0:
+            # Auto-merge may fail if repo doesn't have branch protection - that's OK
+            auto_merge_result = {"enabled": False, "reason": merge_result.stderr.strip()}
+        else:
+            auto_merge_result = {"enabled": True}
+
+    return {"success": True, "url": pr_url, "auto_merge": auto_merge_result}
 
 
 def read_file(branch: str, file_path: str) -> dict:
@@ -492,81 +567,123 @@ def handle_request(request: dict) -> dict:
         }
 
     elif method == "tools/list":
-        return {"result": {"tools": [
-                {
-                    "name": "karkinos_list_workers",
-                    "description": "List all active git worktrees with status (branch, commits ahead, clean/modified)",
-                    "inputSchema": {"type": "object", "properties": {}, "required": []},
-                },
-                {
-                    "name": "karkinos_get_worker_details",
-                    "description": "Get detailed information about a specific worker including commits and diff stats",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {"branch": {"type": "string", "description": "The git branch name of the worker"}},
-                        "required": ["branch"],
+        return {
+            "result": {
+                "tools": [
+                    {
+                        "name": "karkinos_list_workers",
+                        "description": "List all active git worktrees with status (branch, commits ahead, clean/modified)",
+                        "inputSchema": {"type": "object", "properties": {}, "required": []},
                     },
-                },
-                {
-                    "name": "karkinos_cleanup_workers",
-                    "description": "Remove merged or abandoned worker worktrees and their branches",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {"dry_run": {"type": "boolean", "description": "Preview cleanup without making changes", "default": True}},
-                        "required": [],
-                    },
-                },
-                {
-                    "name": "karkinos_create_pr",
-                    "description": "Create a pull request for a worker branch",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "branch": {"type": "string", "description": "The git branch name to create PR for"},
-                            "title": {"type": "string", "description": "PR title"},
-                            "body": {"type": "string", "description": "PR description"},
+                    {
+                        "name": "karkinos_get_worker_details",
+                        "description": "Get detailed information about a specific worker including commits and diff stats",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "branch": {
+                                    "type": "string",
+                                    "description": "The git branch name of the worker",
+                                }
+                            },
+                            "required": ["branch"],
                         },
-                        "required": ["branch", "title"],
                     },
-                },
-                {
-                    "name": "karkinos_update_branches",
-                    "description": "Update worker branches by rebasing or merging latest main into them. Use after merging a PR to prevent conflicts in other workers.",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "dry_run": {"type": "boolean", "description": "Preview what would happen without making changes", "default": True},
-                            "use_rebase": {"type": "boolean", "description": "Use rebase (True) or merge (False) to update branches", "default": True},
+                    {
+                        "name": "karkinos_cleanup_workers",
+                        "description": "Remove merged or abandoned worker worktrees and their branches",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "dry_run": {
+                                    "type": "boolean",
+                                    "description": "Preview cleanup without making changes",
+                                    "default": True,
+                                }
+                            },
+                            "required": [],
                         },
-                        "required": [],
                     },
-                },
-                {
-                    "name": "karkinos_read_file",
-                    "description": "Read a file from a worker worktree",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "branch": {"type": "string", "description": "The git branch name of the worker"},
-                            "file_path": {"type": "string", "description": "Path relative to worktree root"},
+                    {
+                        "name": "karkinos_create_pr",
+                        "description": "Create a pull request for a worker branch",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "branch": {
+                                    "type": "string",
+                                    "description": "The git branch name to create PR for",
+                                },
+                                "title": {"type": "string", "description": "PR title"},
+                                "body": {"type": "string", "description": "PR description"},
+                                "auto_merge": {
+                                    "type": "boolean",
+                                    "description": "Enable auto-merge when CI passes (default: true)",
+                                    "default": True,
+                                },
+                            },
+                            "required": ["branch", "title"],
                         },
-                        "required": ["branch", "file_path"],
                     },
-                },
-                {
-                    "name": "karkinos_get_diff",
-                    "description": "Get full diff content for a worker branch compared to main",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "branch": {"type": "string", "description": "The git branch name of the worker"},
-                            "file_path": {"type": "string", "description": "Optional: specific file to diff"},
+                    {
+                        "name": "karkinos_update_branches",
+                        "description": "Update worker branches by rebasing or merging latest main into them. Use after merging a PR to prevent conflicts in other workers.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "dry_run": {
+                                    "type": "boolean",
+                                    "description": "Preview what would happen without making changes",
+                                    "default": True,
+                                },
+                                "use_rebase": {
+                                    "type": "boolean",
+                                    "description": "Use rebase (True) or merge (False) to update branches",
+                                    "default": True,
+                                },
+                            },
+                            "required": [],
                         },
-                        "required": ["branch"],
                     },
-                },
-            ]
-        }}
+                    {
+                        "name": "karkinos_read_file",
+                        "description": "Read a file from a worker worktree",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "branch": {
+                                    "type": "string",
+                                    "description": "The git branch name of the worker",
+                                },
+                                "file_path": {
+                                    "type": "string",
+                                    "description": "Path relative to worktree root",
+                                },
+                            },
+                            "required": ["branch", "file_path"],
+                        },
+                    },
+                    {
+                        "name": "karkinos_get_diff",
+                        "description": "Get full diff content for a worker branch compared to main",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "branch": {
+                                    "type": "string",
+                                    "description": "The git branch name of the worker",
+                                },
+                                "file_path": {
+                                    "type": "string",
+                                    "description": "Optional: specific file to diff",
+                                },
+                            },
+                            "required": ["branch"],
+                        },
+                    },
+                ]
+            }
+        }
 
     elif method == "tools/call":
         tool_name = params.get("name", "")
@@ -579,7 +696,12 @@ def handle_request(request: dict) -> dict:
         elif tool_name == "karkinos_cleanup_workers":
             result = cleanup_workers(args.get("dry_run", True))
         elif tool_name == "karkinos_create_pr":
-            result = create_pr(args.get("branch", ""), args.get("title", ""), args.get("body", ""))
+            result = create_pr(
+                args.get("branch", ""),
+                args.get("title", ""),
+                args.get("body", ""),
+                args.get("auto_merge", True),
+            )
         elif tool_name == "karkinos_update_branches":
             result = update_branches(args.get("dry_run", True), args.get("use_rebase", True))
         elif tool_name == "karkinos_read_file":
