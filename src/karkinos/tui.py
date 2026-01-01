@@ -416,6 +416,22 @@ class WorkerApp(App):
         height: 100%;
     }
 
+    #loading-state, #empty-state {
+        text-align: center;
+        color: $text-muted;
+        padding: 4;
+        display: none;
+        height: 100%;
+        content-align: center middle;
+    }
+
+    .loading #loading-state { display: block; }
+    .loading #worker-table { display: none; }
+    .loading #empty-state { display: none; }
+
+    .empty:not(.loading) #empty-state { display: block; }
+    .empty:not(.loading) #worker-table { display: none; }
+
     #help-text {
         dock: bottom;
         height: 1;
@@ -452,7 +468,14 @@ class WorkerApp(App):
         yield Container(
             WorkerStatus(id="status-bar"),
             WorkerTable(id="worker-table"),
+            Static("🦀 Scuttling for workers...", id="loading-state"),
+            Static(
+                "No active workers.\n\n"
+                "Use [bold]/worker <branch> <task>[/] in Claude to start one.",
+                id="empty-state",
+            ),
             id="main-container",
+            classes="loading",
         )
         yield Footer()
 
@@ -678,6 +701,15 @@ class WorkerApp(App):
         """Update the worker table UI (must be called from main thread)."""
         self.worker_list = workers
 
+        # Update UI state
+        container = self.query_one("#main-container")
+        container.remove_class("loading")
+
+        if not workers:
+            container.add_class("empty")
+        else:
+            container.remove_class("empty")
+
         # Update table
         table = self.query_one(WorkerTable)
         table.clear()
@@ -740,8 +772,9 @@ class WorkerApp(App):
     def action_refresh(self) -> None:
         """Manual refresh."""
         self._pr_status_cache.clear()  # Clear cache on manual refresh
+        self.query_one("#main-container").add_class("loading")
         self.refresh_workers()
-        self.notify("Refreshed")
+        self.notify("Refreshing...")
 
     def action_update_branches(self) -> None:
         """Update all worker branches by rebasing onto main."""
