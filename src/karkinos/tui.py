@@ -428,6 +428,7 @@ class WorkerApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("u", "update_branches", "Update branches"),
         ("c", "cleanup", "Cleanup merged"),
         ("p", "create_pr", "Create PR"),
         ("enter", "show_details", "Details"),
@@ -442,6 +443,9 @@ class WorkerApp(App):
         self.show_crabs = show_crabs
         self.animation_speed = animation_speed
         self.refresh_timer: Timer | None = None
+        # Cache: branch -> (ci_status, review_status, timestamp)
+        self._pr_status_cache: dict[str, tuple[str, str, float]] = {}
+        self._cache_ttl = 30.0  # seconds
 
     def compose(self) -> ComposeResult:
         yield CrabHeader(animate=self.show_crabs, speed=self.animation_speed)
@@ -455,7 +459,7 @@ class WorkerApp(App):
     def on_mount(self) -> None:
         """Set up the table and start refresh timer."""
         table = self.query_one(WorkerTable)
-        table.add_columns("Worktree", "Branch", "Ahead", "Last Commit", "Changes", "Status")
+        table.add_columns("Worktree", "Branch", "Ahead", "CI", "Review", "Changes", "Status")
 
         self.refresh_workers()
         self.refresh_timer = self.set_interval(5, self.refresh_workers)
@@ -515,6 +519,70 @@ class WorkerApp(App):
                     commits[branch] = msg
         return commits
 
+    def get_pr_status(self, branch: str) -> tuple[str, str]:
+        """Get CI and review status for a branch's PR.
+
+        Returns:
+            Tuple of (ci_status, review_status)
+            ci_status: "pass", "fail", "...", "-" (no PR)
+            review_status: "ok", "chg", "req", "-" (no PR)
+        """
+        import json
+        import time
+
+        # Check cache
+        if branch in self._pr_status_cache:
+            ci, review, timestamp = self._pr_status_cache[branch]
+            if time.time() - timestamp < self._cache_ttl:
+                return (ci, review)
+
+        # Fetch PR status
+        result = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", "statusCheckRollup,reviewDecision,state"],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            return ("-", "-")  # No PR exists
+
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return ("-", "-")
+
+        # CI Status from statusCheckRollup
+        checks = data.get("statusCheckRollup", []) or []
+        if not checks:
+            ci_status = "-"
+        else:
+            conclusions = [c.get("conclusion") for c in checks if c.get("conclusion")]
+            states = [c.get("status") for c in checks]
+
+            if any(c == "FAILURE" for c in conclusions):
+                ci_status = "fail"
+            elif all(c == "SUCCESS" for c in conclusions if c):
+                ci_status = "pass"
+            elif any(s in ("IN_PROGRESS", "PENDING", "QUEUED") for s in states):
+                ci_status = "..."
+            else:
+                ci_status = "?"
+
+        # Review status
+        review = data.get("reviewDecision", "")
+        if review == "APPROVED":
+            review_status = "ok"
+        elif review == "CHANGES_REQUESTED":
+            review_status = "chg"
+        elif review == "REVIEW_REQUIRED":
+            review_status = "req"
+        else:
+            review_status = "-"
+
+        # Update cache
+        self._pr_status_cache[branch] = (ci_status, review_status, time.time())
+        return (ci_status, review_status)
+
     def get_worker_details(
         self, wt: dict, default_branch: str, branch_commits: dict[str, str]
     ) -> dict:
@@ -561,6 +629,15 @@ class WorkerApp(App):
             else:
                 wt["status"] = "unknown"
                 wt["activity"] = ""
+
+        # PR status (CI and review)
+        if branch:
+            ci_status, review_status = self.get_pr_status(branch)
+            wt["ci_status"] = ci_status
+            wt["review_status"] = review_status
+        else:
+            wt["ci_status"] = "-"
+            wt["review_status"] = "-"
 
         return wt
 
@@ -609,9 +686,26 @@ class WorkerApp(App):
             path = Path(w["path"]).name
             branch = w.get("branch", "?")
             ahead = f"+{w.get('ahead', 0)}"
-            commit = w.get("last_commit", "")[:40]
+            ci = w.get("ci_status", "-")
+            review = w.get("review_status", "-")
             activity = w.get("activity", "")
             status = w.get("status", "?")
+
+            # Color CI status
+            if ci == "pass":
+                ci = "[green]pass[/]"
+            elif ci == "fail":
+                ci = "[red]fail[/]"
+            elif ci == "...":
+                ci = "[yellow]...[/]"
+
+            # Color review status
+            if review == "ok":
+                review = "[green]ok[/]"
+            elif review == "chg":
+                review = "[red]chg[/]"
+            elif review == "req":
+                review = "[yellow]req[/]"
 
             # Color activity based on git status prefix
             if activity.startswith("M"):
@@ -631,7 +725,7 @@ class WorkerApp(App):
             elif status == "missing":
                 status = "[red]missing[/]"
 
-            table.add_row(path, branch, ahead, commit, activity, status)
+            table.add_row(path, branch, ahead, ci, review, activity, status)
 
         # Reset cursor to valid position after table rebuild
         if table.row_count > 0:
@@ -645,8 +739,68 @@ class WorkerApp(App):
 
     def action_refresh(self) -> None:
         """Manual refresh."""
+        self._pr_status_cache.clear()  # Clear cache on manual refresh
         self.refresh_workers()
         self.notify("Refreshed")
+
+    def action_update_branches(self) -> None:
+        """Update all worker branches by rebasing onto main."""
+        self.notify("Updating branches...")
+        self._update_branches_async()
+
+    @work(thread=True)
+    def _update_branches_async(self) -> None:
+        """Rebase all workers onto main in background thread."""
+        # Fetch latest
+        subprocess.run(["git", "fetch", "origin"], capture_output=True)
+
+        default_branch = get_default_branch()
+        updated = 0
+        conflicts = 0
+        skipped = 0
+
+        for w in self.worker_list:
+            path = w.get("path")
+            branch = w.get("branch")
+            status = w.get("status")
+
+            if not path or not branch:
+                continue
+
+            # Skip workers with uncommitted changes
+            if status == "modified":
+                skipped += 1
+                continue
+
+            # Rebase onto main
+            result = subprocess.run(
+                ["git", "-C", path, "rebase", f"origin/{default_branch}"],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode == 0:
+                updated += 1
+            else:
+                # Abort failed rebase
+                subprocess.run(
+                    ["git", "-C", path, "rebase", "--abort"],
+                    capture_output=True,
+                )
+                conflicts += 1
+
+        # Build result message
+        parts = []
+        if updated:
+            parts.append(f"{updated} updated")
+        if conflicts:
+            parts.append(f"{conflicts} conflicts")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        msg = ", ".join(parts) if parts else "No branches to update"
+
+        self.call_from_thread(self.notify, msg)
+        self.call_from_thread(self.refresh_workers)
 
     def action_cleanup(self) -> None:
         """Clean up merged worktrees."""
@@ -691,13 +845,91 @@ class WorkerApp(App):
     def action_create_pr(self) -> None:
         """Create PR for selected worker."""
         worker = self._get_selected_worker()
-        if worker:
-            branch = worker.get("branch")
-            if branch:
-                # Would need to be async in real implementation
-                self.notify(f"Would create PR for {branch}")
-        else:
+        if not worker:
             self.notify("No worker selected", severity="warning")
+            return
+        branch = worker.get("branch")
+        if not branch:
+            self.notify("No branch for worker", severity="warning")
+            return
+        self.notify(f"Creating PR for {branch}...")
+        self._create_pr_async(branch)
+
+    @work(thread=True)
+    def _create_pr_async(self, branch: str) -> None:
+        """Create PR in background thread."""
+        import json
+
+        # Check if PR already exists
+        check_result = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", "url"],
+            capture_output=True,
+            text=True,
+        )
+        if check_result.returncode == 0:
+            try:
+                pr_data = json.loads(check_result.stdout)
+                url = pr_data.get("url", "unknown")
+                self.call_from_thread(self.notify, f"PR exists: {url}")
+            except json.JSONDecodeError:
+                self.call_from_thread(self.notify, "PR already exists")
+            return
+
+        # Push branch
+        push_result = subprocess.run(
+            ["git", "push", "-u", "origin", branch],
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode != 0:
+            self.call_from_thread(
+                self.notify, f"Push failed: {push_result.stderr[:50]}", severity="error"
+            )
+            return
+
+        # Get last commit message for PR title
+        commit_result = subprocess.run(
+            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
+            capture_output=True,
+            text=True,
+        )
+        title = commit_result.stdout.strip() if commit_result.returncode == 0 else branch
+
+        # Create PR
+        pr_result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--head",
+                branch,
+                "--title",
+                title,
+                "--body",
+                "Created by Karkinos TUI\n\n---\nCrab Worker (Karkinos)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if pr_result.returncode != 0:
+            self.call_from_thread(
+                self.notify, f"PR creation failed: {pr_result.stderr[:50]}", severity="error"
+            )
+            return
+
+        pr_url = pr_result.stdout.strip()
+
+        # Enable auto-merge
+        pr_number = pr_url.rstrip("/").split("/")[-1]
+        merge_result = subprocess.run(
+            ["gh", "pr", "merge", pr_number, "--auto", "--squash"],
+            capture_output=True,
+            text=True,
+        )
+        auto_merge_msg = " (auto-merge enabled)" if merge_result.returncode == 0 else ""
+
+        self.call_from_thread(self.notify, f"PR created{auto_merge_msg}: {pr_url}")
+        self.call_from_thread(self.refresh_workers)
 
     def _get_selected_worker(self) -> dict | None:
         """Get the currently selected worker from the table."""
