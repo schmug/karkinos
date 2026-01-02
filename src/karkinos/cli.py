@@ -181,7 +181,9 @@ def spawn_watch_terminal(args):
 
     if vscode_detected and system == "Darwin":
         # Split terminal in VS Code/Cursor using AppleScript
-        app_name = "Cursor" if "cursor" in os.environ.get("__CFBundleIdentifier", "").lower() else "Code"
+        app_name = (
+            "Cursor" if "cursor" in os.environ.get("__CFBundleIdentifier", "").lower() else "Code"
+        )
         script = f'''
         tell application "System Events"
             tell process "{app_name}"
