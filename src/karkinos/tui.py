@@ -504,20 +504,37 @@ class WorkerApp(App):
 
         return worktrees
 
-    def get_all_branch_commits(self) -> dict[str, str]:
-        """Batch fetch all branch commit messages in one git call."""
+    def get_branch_details(self, default_branch: str) -> dict[str, dict]:
+        """Batch fetch branch details (subject, ahead count) in one git call."""
+        # Use fallback if default_branch is empty
+        target = default_branch or "main"
         result = subprocess.run(
-            ["git", "for-each-ref", "--format=%(refname:short)|%(subject)", "refs/heads/"],
+            [
+                "git",
+                "for-each-ref",
+                f"--format=%(refname:short)|%(subject)|%(ahead-behind:{target})",
+                "refs/heads/",
+            ],
             capture_output=True,
             text=True,
         )
-        commits = {}
+        details = {}
         if result.returncode == 0:
             for line in result.stdout.strip().split("\n"):
-                if "|" in line:
-                    branch, msg = line.split("|", 1)
-                    commits[branch] = msg
-        return commits
+                # Split from right to preserve pipes in commit subject
+                # Format: refname|subject|ahead behind
+                parts = line.rsplit("|", 2)
+                if len(parts) == 3:
+                    branch = parts[0]
+                    subject = parts[1]
+                    ahead_behind = parts[2]
+                    try:
+                        ahead, _ = map(int, ahead_behind.split())
+                    except ValueError:
+                        ahead = 0
+
+                    details[branch] = {"subject": subject, "ahead": ahead}
+        return details
 
     def get_pr_status(self, branch: str) -> tuple[str, str]:
         """Get CI and review status for a branch's PR.
@@ -584,27 +601,17 @@ class WorkerApp(App):
         return (ci_status, review_status)
 
     def get_worker_details(
-        self, wt: dict, default_branch: str, branch_commits: dict[str, str]
+        self, wt: dict, default_branch: str, branch_details: dict[str, dict]
     ) -> dict:
         """Enrich worktree with additional details."""
         branch = wt.get("branch", "")
+        details = branch_details.get(branch, {})
 
-        # Commits ahead of default branch
-        result = subprocess.run(
-            ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            try:
-                wt["ahead"] = int(result.stdout.strip())
-            except ValueError:
-                wt["ahead"] = 0
-        else:
-            wt["ahead"] = 0
+        # Commits ahead of default branch (from pre-fetched batch)
+        wt["ahead"] = details.get("ahead", 0)
 
         # Last commit (from pre-fetched batch)
-        wt["last_commit"] = branch_commits.get(branch, "")[:50]
+        wt["last_commit"] = details.get("subject", "")[:50]
 
         # Status and activity
         if not Path(wt["path"]).exists():
@@ -654,8 +661,8 @@ class WorkerApp(App):
                 main_path = wt["path"]
                 break
 
-        # Batch fetch all commit messages in one git call
-        branch_commits = self.get_all_branch_commits()
+        # Batch fetch all commit messages and ahead counts in one git call
+        branch_details = self.get_branch_details(default_branch)
 
         # Filter to worker worktrees only
         worker_worktrees = [
@@ -666,7 +673,7 @@ class WorkerApp(App):
         with ThreadPoolExecutor() as executor:
             workers = list(
                 executor.map(
-                    lambda wt: self.get_worker_details(wt, default_branch, branch_commits),
+                    lambda wt: self.get_worker_details(wt, default_branch, branch_details),
                     worker_worktrees,
                 )
             )
