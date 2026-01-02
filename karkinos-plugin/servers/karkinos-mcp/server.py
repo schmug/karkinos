@@ -531,7 +531,17 @@ def read_file(branch: str, file_path: str) -> dict:
     if not worker:
         return {"error": f"Worker with branch '{branch}' not found"}
 
-    full_path = Path(worker["path"]) / file_path
+    try:
+        base_path = Path(worker["path"]).resolve()
+        full_path = (base_path / file_path).resolve()
+
+        # Security check: Ensure we haven't traversed outside the worktree
+        # We use .parents to correctly handle sibling directory attacks
+        if base_path not in full_path.parents and base_path != full_path:
+            return {"error": f"Access denied: {file_path} is outside of worktree"}
+
+    except Exception as e:
+        return {"error": f"Invalid path: {str(e)}"}
 
     if not full_path.exists():
         return {"error": f"File not found: {file_path}"}
