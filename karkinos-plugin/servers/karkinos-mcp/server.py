@@ -7,6 +7,14 @@ import sys
 from pathlib import Path
 
 
+def validate_branch_name(branch: str) -> None:
+    """Validate branch name to prevent argument injection."""
+    if not branch:
+        raise ValueError("Branch name cannot be empty")
+    if branch.startswith("-"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+
 def get_worktrees() -> list[dict]:
     """Get list of git worktrees with their status."""
     result = subprocess.run(
@@ -59,8 +67,12 @@ def get_default_branch() -> str:
 
 def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
     """Get number of commits ahead of default branch."""
+    validate_branch_name(branch)
     if default_branch is None:
         default_branch = get_default_branch()
+
+    # Git rev-list range syntax doesn't support -- separator easily,
+    # but since we validate branch doesn't start with -, it's safe.
     result = subprocess.run(
         ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
         capture_output=True,
@@ -108,6 +120,14 @@ def list_workers() -> dict:
             continue
 
         branch = wt.get("branch", "detached")
+        # Ensure branch name is valid before passing to get_commits_ahead
+        try:
+            if branch != "detached":
+                validate_branch_name(branch)
+        except ValueError:
+            # Skip invalid branch names in listing or treat as detached
+            branch = "detached"
+
         workers.append(
             {
                 "path": wt["path"],
@@ -125,6 +145,7 @@ def list_workers() -> dict:
 
 def get_worker_details(branch: str) -> dict:
     """Get detailed information about a specific worker."""
+    validate_branch_name(branch)
     worktrees = get_worktrees()
     default_branch = get_default_branch()
 
@@ -195,6 +216,14 @@ def cleanup_workers(dry_run: bool = True) -> dict:
     for wt in workers:
         branch = wt.get("branch")
         if branch and branch in merged:
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                # If branch name is invalid, we might skip it or log error
+                # But here it comes from git worktree list, so it should be fine.
+                # Still, defensive programming.
+                continue
+
             if dry_run:
                 cleaned.append({"path": wt["path"], "branch": branch, "action": "would_remove"})
             else:
@@ -259,6 +288,11 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
         branch = wt["branch"]
         path = wt["path"]
 
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            continue
+
         if not Path(path).exists():
             results["failed"].append(
                 {
@@ -282,6 +316,7 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
             continue
 
         # Check if branch needs updating by comparing with origin/main
+        # Use -- to separate options from args where possible, though merge-base doesn't strictly need it if branch validated
         merge_base_result = subprocess.run(
             ["git", "-C", path, "merge-base", branch, f"origin/{default_branch}"],
             capture_output=True,
@@ -311,7 +346,7 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
             # In dry-run mode, simulate what would happen
             if use_rebase:
                 # Check if rebase would have conflicts by doing a dry-run rebase
-                test_result = subprocess.run(
+                subprocess.run(
                     [
                         "git",
                         "-C",
@@ -414,9 +449,15 @@ def create_pr(branch: str, title: str, body: str = "", auto_merge: bool = True) 
         body: PR description
         auto_merge: Enable auto-merge when CI passes (default: True)
     """
+    try:
+        validate_branch_name(branch)
+    except ValueError as e:
+        return {"error": str(e)}
+
     # First push the branch
+    # Use -- to prevent argument injection
     push_result = subprocess.run(
-        ["git", "push", "-u", "origin", branch],
+        ["git", "push", "-u", "origin", "--", branch],
         capture_output=True,
         text=True,
     )
@@ -425,6 +466,8 @@ def create_pr(branch: str, title: str, body: str = "", auto_merge: bool = True) 
         return {"error": f"Failed to push branch: {push_result.stderr.strip()}"}
 
     # Create PR
+    # Note: gh CLI might not support -- separator for --head argument in all versions,
+    # but since we validated the branch name doesn't start with -, it is safe.
     pr_result = subprocess.run(
         [
             "gh",
@@ -475,6 +518,7 @@ def read_file(branch: str, file_path: str) -> dict:
     Returns:
         Dict with file content or error message.
     """
+    validate_branch_name(branch)
     worktrees = get_worktrees()
 
     # Find the worker by branch
@@ -528,6 +572,7 @@ def get_diff(branch: str, file_path: str | None = None) -> dict:
     Returns:
         Dict with full diff content or error message.
     """
+    validate_branch_name(branch)
     worktrees = get_worktrees()
     default_branch = get_default_branch()
 
@@ -699,27 +744,31 @@ def handle_request(request: dict) -> dict:
         tool_name = params.get("name", "")
         args = params.get("arguments", {})
 
-        if tool_name == "karkinos_list_workers":
-            result = list_workers()
-        elif tool_name == "karkinos_get_worker_details":
-            result = get_worker_details(args.get("branch", ""))
-        elif tool_name == "karkinos_cleanup_workers":
-            result = cleanup_workers(args.get("dry_run", True))
-        elif tool_name == "karkinos_create_pr":
-            result = create_pr(
-                args.get("branch", ""),
-                args.get("title", ""),
-                args.get("body", ""),
-                args.get("auto_merge", True),
-            )
-        elif tool_name == "karkinos_update_branches":
-            result = update_branches(args.get("dry_run", True), args.get("use_rebase", True))
-        elif tool_name == "karkinos_read_file":
-            result = read_file(args.get("branch", ""), args.get("file_path", ""))
-        elif tool_name == "karkinos_get_diff":
-            result = get_diff(args.get("branch", ""), args.get("file_path"))
-        else:
-            result = {"error": f"Unknown tool: {tool_name}"}
+        try:
+            if tool_name == "karkinos_list_workers":
+                result = list_workers()
+            elif tool_name == "karkinos_get_worker_details":
+                result = get_worker_details(args.get("branch", ""))
+            elif tool_name == "karkinos_cleanup_workers":
+                result = cleanup_workers(args.get("dry_run", True))
+            elif tool_name == "karkinos_create_pr":
+                result = create_pr(
+                    args.get("branch", ""),
+                    args.get("title", ""),
+                    args.get("body", ""),
+                    args.get("auto_merge", True),
+                )
+            elif tool_name == "karkinos_update_branches":
+                result = update_branches(args.get("dry_run", True), args.get("use_rebase", True))
+            elif tool_name == "karkinos_read_file":
+                result = read_file(args.get("branch", ""), args.get("file_path", ""))
+            elif tool_name == "karkinos_get_diff":
+                result = get_diff(args.get("branch", ""), args.get("file_path"))
+            else:
+                result = {"error": f"Unknown tool: {tool_name}"}
+        except ValueError as e:
+            # Catch validation errors from validate_branch_name and others
+            result = {"error": str(e)}
 
         return {"result": {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}}
 

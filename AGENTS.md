@@ -44,3 +44,26 @@ Karkinos enables parallel Claude Code development using git worktrees. It spawns
 - Workers run with `claude --print --dangerously-skip-permissions` for autonomous operation
 - Commit counts measured relative to `main` branch
 - Status tracking: "clean" (no uncommitted changes) vs "modified"
+
+## Project Maintenance
+
+### Changelog
+
+**IMPORTANT**: When making significant changes, update `CHANGELOG.md` following the [Keep a Changelog](https://keepachangelog.com/) format:
+
+- Add entries under `[Unreleased]` section
+- Categorize changes: Added, Changed, Deprecated, Removed, Fixed, Security
+- Use descriptive but concise descriptions
+- Reference issue/PR numbers when applicable (e.g., `(#42)`)
+- Move unreleased changes to a new version section when releasing
+
+Example:
+```markdown
+## [Unreleased]
+
+### Added
+- New feature description (#123)
+
+### Fixed
+- Bug fix description (#124)
+```
