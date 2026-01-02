@@ -281,6 +281,19 @@ class WorkerTable(DataTable):
         self.zebra_stripes = True
 
 
+class EmptyState(Static):
+    """Widget to show when no workers are found."""
+
+    def render(self) -> str:
+        return (
+            "\n"
+            "[bold]No active worktrees found[/]\n"
+            "\n"
+            "Create a new git worktree to get started!\n"
+            "[dim]git worktree add ../<name> <branch>[/]"
+        )
+
+
 class CrabSprite:
     """Individual crab sprite with position, direction, and expression."""
 
@@ -416,6 +429,14 @@ class WorkerApp(App):
         height: 100%;
     }
 
+    #empty-state {
+        height: 100%;
+        align: center middle;
+        text-align: center;
+        color: $text-muted;
+        display: none;
+    }
+
     #help-text {
         dock: bottom;
         height: 1;
@@ -452,6 +473,7 @@ class WorkerApp(App):
         yield Container(
             WorkerStatus(id="status-bar"),
             WorkerTable(id="worker-table"),
+            EmptyState(id="empty-state"),
             id="main-container",
         )
         yield Footer()
@@ -685,9 +707,22 @@ class WorkerApp(App):
         """Update the worker table UI (must be called from main thread)."""
         self.worker_list = workers
 
+        # Update status bar
+        status_bar = self.query_one(WorkerStatus)
+        status_bar.update_stats(workers)
+
         # Update table
         table = self.query_one(WorkerTable)
+        empty_state = self.query_one(EmptyState)
         table.clear()
+
+        if not workers:
+            table.display = False
+            empty_state.display = True
+            return
+
+        table.display = True
+        empty_state.display = False
 
         for w in workers:
             path = Path(w["path"]).name
@@ -739,10 +774,6 @@ class WorkerApp(App):
             table.move_cursor(row=min(table.cursor_row or 0, table.row_count - 1))
         else:
             table.move_cursor(row=0)
-
-        # Update status bar
-        status_bar = self.query_one(WorkerStatus)
-        status_bar.update_stats(workers)
 
     def action_refresh(self) -> None:
         """Manual refresh."""
