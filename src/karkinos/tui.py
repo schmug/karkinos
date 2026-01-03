@@ -82,7 +82,7 @@ class WorkerDetailScreen(ModalScreen):
         with Vertical(id="detail-container"):
             yield Static(id="detail-header")
             yield ScrollableContainer(Static(id="detail-text"), id="detail-content")
-            yield Static("[l] Logs  [d] Diff  [i] Info  [ESC/q] Close", id="detail-footer")
+            yield Static("", id="detail-footer")
 
     def on_mount(self) -> None:
         self._update_view()
@@ -91,6 +91,7 @@ class WorkerDetailScreen(ModalScreen):
         """Update the display based on current view."""
         header = self.query_one("#detail-header", Static)
         content = self.query_one("#detail-text", Static)
+        footer = self.query_one("#detail-footer", Static)
 
         branch = self.worker.get("branch", "unknown")
 
@@ -103,6 +104,30 @@ class WorkerDetailScreen(ModalScreen):
         else:  # info
             header.update(f"[bold cyan]Worker Info:[/] {branch}")
             content.update(self._get_info())
+
+        # Update footer with active view highlighted
+        footer.update(self._get_footer_text())
+
+        # Reset scroll position to top
+        self.query_one("#detail-content", ScrollableContainer).scroll_to(y=0, animate=False)
+
+    def _get_footer_text(self) -> str:
+        """Generate footer text with active view highlighted."""
+        views = [
+            ("logs", "[l] Logs"),
+            ("diff", "[d] Diff"),
+            ("info", "[i] Info"),
+        ]
+
+        parts = []
+        for view_id, label in views:
+            if self.current_view == view_id:
+                parts.append(f"[reverse]{label}[/]")
+            else:
+                parts.append(label)
+
+        parts.append("[ESC/q] Close")
+        return "  ".join(parts)
 
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
