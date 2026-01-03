@@ -77,7 +77,7 @@ def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
 def get_last_commit(branch: str) -> str:
     """Get last commit message for a branch."""
     result = subprocess.run(
-        ["git", "log", branch, "--oneline", "-1"],
+        ["git", "log", "--oneline", "-1", "--end-of-options", branch],
         capture_output=True,
         text=True,
     )
@@ -383,7 +383,7 @@ def cmd_cleanup(args):
                     continue
                 # Only delete branch if worktree removal succeeded
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )

@@ -109,6 +109,12 @@ class WorkerDetailScreen(ModalScreen):
         branch = self.worker.get("branch", "")
         default_branch = get_default_branch()
 
+        # Use -- to separate args, but range syntax A..B is positional.
+        # However, we can construct the command carefully.
+        # Git log expects: [options] [<revision range>] [[--] <path>...]
+        # If branch starts with -, A..-B might be parsed weirdly or correctly depending on git
+        # version. But here {branch} is part of the range string.
+        # If branch is "-p", range is "main..-p". Git treats this as range.
         result = subprocess.run(
             [
                 "git",
@@ -867,7 +873,7 @@ class WorkerApp(App):
                     continue
 
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
@@ -915,7 +921,7 @@ class WorkerApp(App):
 
         # Push branch
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
@@ -927,7 +933,7 @@ class WorkerApp(App):
 
         # Get last commit message for PR title
         commit_result = subprocess.run(
-            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
+            ["git", "log", "--oneline", "-1", "--format=%s", "--end-of-options", branch],
             capture_output=True,
             text=True,
         )
