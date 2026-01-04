@@ -82,7 +82,7 @@ class WorkerDetailScreen(ModalScreen):
         with Vertical(id="detail-container"):
             yield Static(id="detail-header")
             yield ScrollableContainer(Static(id="detail-text"), id="detail-content")
-            yield Static("[l] Logs  [d] Diff  [i] Info  [ESC/q] Close", id="detail-footer")
+            yield Static(self._get_footer_text(), id="detail-footer")
 
     def on_mount(self) -> None:
         self._update_view()
@@ -91,8 +91,12 @@ class WorkerDetailScreen(ModalScreen):
         """Update the display based on current view."""
         header = self.query_one("#detail-header", Static)
         content = self.query_one("#detail-text", Static)
+        footer = self.query_one("#detail-footer", Static)
 
         branch = self.worker.get("branch", "unknown")
+
+        # Update footer highlights
+        footer.update(self._get_footer_text())
 
         if self.current_view == "logs":
             header.update(f"[bold cyan]Commit Log:[/] {branch}")
@@ -103,6 +107,18 @@ class WorkerDetailScreen(ModalScreen):
         else:  # info
             header.update(f"[bold cyan]Worker Info:[/] {branch}")
             content.update(self._get_info())
+
+    def _get_footer_text(self) -> str:
+        """Get formatted footer text with active view highlighted."""
+        views = [("l", "Logs", "logs"), ("d", "Diff", "diff"), ("i", "Info", "info")]
+        parts = []
+        for key, label, view_id in views:
+            if self.current_view == view_id:
+                parts.append(f"[{key}] [bold reverse] {label} [/]")
+            else:
+                parts.append(f"[{key}] {label}")
+        parts.append("[ESC/q] Close")
+        return "  ".join(parts)
 
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
@@ -290,7 +306,8 @@ class EmptyState(Static):
             "[bold]No active worktrees found[/]\n"
             "\n"
             "Create a new git worktree to get started!\n"
-            "[dim]git worktree add ../<name> <branch>[/]"
+            "[dim]git worktree add ../<name> <branch>[/]\n"
+            "[dim]or use /worker command[/]"
         )
 
 
