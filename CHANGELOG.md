@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Subagent conflict prevention: orchestrator verifies no file conflicts before spawning workers
+- Staging branch workflow: all worker branches created from staging, PRs target staging
+- Pre-spawn conflict checking in worker and issue-worker skills
+- Comprehensive AGENTS.md documentation for parallel worker orchestration
+
+### Changed
+- Worker branches now created from `staging` instead of `main`
+- Worker PRs now target `staging` instead of `main`
+- Updated workers.json schema to track `base` branch and `files` being modified
+
 ## [0.2.1] - 2024-12-XX
 
 ### Added

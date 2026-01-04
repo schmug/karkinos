@@ -30,18 +30,45 @@ When the user invokes `/worker`, follow these steps:
 
 Extract the branch name (first argument) and task description (remaining text).
 
-### 2. Create Worktree
+### 2. Pre-Spawn Conflict Check
+
+**CRITICAL**: Before creating the worktree, verify no file conflicts exist:
+
+```bash
+# Analyze which files the task will likely modify
+# Then check existing workers for conflicts
+for worktree in $(git worktree list --porcelain | grep "^worktree" | cut -d' ' -f2 | grep -v "$(pwd)$"); do
+  echo "=== Checking: $worktree ==="
+  git -C "$worktree" diff --name-only staging 2>/dev/null
+done
+```
+
+If any existing worker is modifying files that this task will touch, **DO NOT SPAWN**. Either:
+- Wait for the conflicting worker to complete
+- Queue this task for later
+- Inform the user of the conflict
+
+### 3. Ensure Staging Branch Exists
+
+```bash
+# Ensure staging branch exists and is up to date
+git fetch origin
+git checkout staging 2>/dev/null || git checkout -b staging origin/main
+git pull origin staging 2>/dev/null || true
+```
+
+### 4. Create Worktree
 
 ```bash
 # Get project name for worktree prefix
 PROJECT=$(basename $(git rev-parse --show-toplevel))
 WORKTREE_PATH="../${PROJECT}-$(echo $BRANCH | tr '/' '-')"
 
-# Create the worktree with a new branch
-git worktree add "$WORKTREE_PATH" -b "$BRANCH"
+# Create the worktree with a new branch FROM STAGING
+git worktree add "$WORKTREE_PATH" -b "$BRANCH" staging
 ```
 
-### 3. Spawn Worker Claude
+### 5. Spawn Worker Claude
 
 Run a Claude instance in the worktree with full autonomy:
 
@@ -49,7 +76,7 @@ Run a Claude instance in the worktree with full autonomy:
 cd "$WORKTREE_PATH" && claude --print --dangerously-skip-permissions "$TASK_DESCRIPTION"
 ```
 
-### 4. Push and Create PR
+### 6. Push and Create PR (targeting staging)
 
 After the worker completes successfully and has made commits:
 
@@ -57,8 +84,8 @@ After the worker completes successfully and has made commits:
 # Push the branch to origin
 git push -u origin "$BRANCH"
 
-# Create PR with auto-generated summary
-gh pr create --title "<commit message or task summary>" --body "$(cat <<'EOF'
+# Create PR targeting STAGING (not main)
+gh pr create --base staging --title "<commit message or task summary>" --body "$(cat <<'EOF'
 ## Summary
 <brief description of changes>
 
@@ -74,7 +101,7 @@ EOF
 gh pr merge --auto --squash
 ```
 
-### 5. Report Results
+### 7. Report Results
 
 After the worker completes:
 1. Show the worker's output
@@ -88,9 +115,14 @@ After the worker completes:
 ## Important Notes
 
 - Workers have full autonomy (`--dangerously-skip-permissions`)
+- **All branches are created from `staging`**, not main
+- **All PRs target `staging`**, not main
+- **ALWAYS check for file conflicts** before spawning a new worker
 - Each worker gets its own branch - no conflicts with main work
 - Workers push their branch and create PRs when done
 - Use `git worktree list` to see active workers
 - Use `git worktree remove <path>` to clean up
+
+**Staging Workflow:** Worker PRs merge to staging. When CI is green on staging, create a PR from staging → main.
 
 **Tip:** Run `karkinos watch` in another terminal to monitor worker progress in real-time, or use `karkinos watch --spawn` to open it automatically.

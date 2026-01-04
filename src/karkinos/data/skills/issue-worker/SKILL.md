@@ -39,15 +39,43 @@ Create a descriptive branch name from the issue:
 
 For bug issues, use `fix/` prefix instead of `feat/`.
 
-### 3. Create Worktree
+### 3. Pre-Spawn Conflict Check
+
+**CRITICAL**: Before creating the worktree, verify no file conflicts exist:
+
+```bash
+# Analyze which files the issue will likely modify based on its description
+# Then check existing workers for conflicts
+for worktree in $(git worktree list --porcelain | grep "^worktree" | cut -d' ' -f2 | grep -v "$(pwd)$"); do
+  echo "=== Checking: $worktree ==="
+  git -C "$worktree" diff --name-only staging 2>/dev/null
+done
+```
+
+If any existing worker is modifying files that this issue will touch, **DO NOT SPAWN**. Either:
+- Wait for the conflicting worker to complete
+- Queue this issue for later
+- Inform the user of the conflict
+
+### 4. Ensure Staging Branch Exists
+
+```bash
+# Ensure staging branch exists and is up to date
+git fetch origin
+git checkout staging 2>/dev/null || git checkout -b staging origin/main
+git pull origin staging 2>/dev/null || true
+```
+
+### 5. Create Worktree
 
 ```bash
 BRANCH="feat/issue-<number>-<slug>"
 WORKTREE_PATH="../artemis-issue-<number>"
-git worktree add "$WORKTREE_PATH" -b "$BRANCH"
+# Create the worktree with a new branch FROM STAGING
+git worktree add "$WORKTREE_PATH" -b "$BRANCH" staging
 ```
 
-### 4. Build Task Prompt
+### 6. Build Task Prompt
 
 Construct a comprehensive prompt for the worker:
 
@@ -68,7 +96,7 @@ You are working on GitHub Issue #<number>: <title>
 2. Implement the necessary changes
 3. Write tests if applicable
 4. Commit your changes with message referencing the issue (e.g., "feat: add retry logic (fixes #42)")
-5. Push your branch and create a PR
+5. Push your branch and create a PR to staging
 
 ## Guidelines
 - Follow existing code patterns in the repository
@@ -76,13 +104,13 @@ You are working on GitHub Issue #<number>: <title>
 - Add comments only where logic isn't self-evident
 ```
 
-### 5. Spawn Worker
+### 7. Spawn Worker
 
 ```bash
 cd "$WORKTREE_PATH" && claude --print --dangerously-skip-permissions "$PROMPT"
 ```
 
-### 6. Push and Create PR
+### 8. Push and Create PR (targeting staging)
 
 After the worker completes successfully and has made commits:
 
@@ -90,8 +118,8 @@ After the worker completes successfully and has made commits:
 # Push the branch to origin
 git push -u origin "$BRANCH"
 
-# Create PR linking to the issue
-gh pr create --title "<issue title>" --body "$(cat <<'EOF'
+# Create PR linking to the issue, targeting STAGING
+gh pr create --base staging --title "<issue title>" --body "$(cat <<'EOF'
 ## Summary
 <brief description of changes>
 
@@ -109,19 +137,19 @@ EOF
 gh pr merge --auto --squash
 ```
 
-### 7. Report Results
+### 9. Report Results
 
 After completion:
 1. Show worker output summary
 2. Show commits made: `git log $BRANCH --oneline -5`
-3. Show files changed: `git diff main...$BRANCH --stat`
+3. Show files changed: `git diff staging...$BRANCH --stat`
 4. Show the PR URL
 5. Offer next steps:
    - Review the PR
    - Continue working on it
    - Clean up if failed
 
-### 8. Track Worker
+### 10. Track Worker
 
 Add to `.claude/workers.json`:
 ```json
@@ -129,11 +157,22 @@ Add to `.claude/workers.json`:
   "type": "issue",
   "issue": 42,
   "branch": "feat/issue-42-add-retry-logic",
+  "base": "staging",
   "worktree": "../artemis-issue-42",
+  "files": ["src/file1.py", "src/file2.py"],
   "created": "2024-01-15T10:30:00Z",
   "status": "completed",
   "pr": "<pr-url>"
 }
 ```
+
+## Important Notes
+
+- **All branches are created from `staging`**, not main
+- **All PRs target `staging`**, not main
+- **ALWAYS check for file conflicts** before spawning a new worker
+- Track which files each worker modifies to prevent conflicts
+
+**Staging Workflow:** Worker PRs merge to staging. When CI is green on staging, create a PR from staging → main.
 
 **Tip:** Run `karkinos watch` in another terminal to monitor worker progress, or use `karkinos watch --spawn` to open it automatically.
