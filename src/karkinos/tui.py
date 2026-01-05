@@ -91,6 +91,17 @@ class WorkerDetailScreen(ModalScreen):
         """Update the display based on current view."""
         header = self.query_one("#detail-header", Static)
         content = self.query_one("#detail-text", Static)
+        footer = self.query_one("#detail-footer", Static)
+
+        # Update footer active state
+        def style(text, active):
+            return f"[reverse]{text}[/]" if active else text
+
+        f_logs = style("[l] Logs", self.current_view == "logs")
+        f_diff = style("[d] Diff", self.current_view == "diff")
+        f_info = style("[i] Info", self.current_view == "info")
+
+        footer.update(f"{f_logs}  {f_diff}  {f_info}  [ESC/q] Close")
 
         branch = self.worker.get("branch", "unknown")
 
@@ -290,6 +301,7 @@ class EmptyState(Static):
             "[bold]No active worktrees found[/]\n"
             "\n"
             "Create a new git worktree to get started!\n"
+            "Use the [bold cyan]/worker[/] command in Claude, or run:\n"
             "[dim]git worktree add ../<name> <branch>[/]"
         )
 
