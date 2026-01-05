@@ -15,6 +15,14 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
 
+def validate_branch_name(branch: str) -> None:
+    """Validate branch name to prevent argument injection."""
+    if not branch:
+        raise ValueError("Branch name cannot be empty")
+    if branch.startswith("-"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
@@ -575,6 +583,11 @@ class WorkerApp(App):
             if time.time() - timestamp < self._cache_ttl:
                 return (ci, review)
 
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return ("-", "-")
+
         # Fetch PR status
         result = subprocess.run(
             ["gh", "pr", "view", branch, "--json", "statusCheckRollup,reviewDecision,state"],
@@ -805,6 +818,12 @@ class WorkerApp(App):
             if not path or not branch:
                 continue
 
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                skipped += 1
+                continue
+
             # Skip workers with uncommitted changes
             if status == "modified":
                 skipped += 1
@@ -866,8 +885,9 @@ class WorkerApp(App):
                     self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
                     continue
 
+                # Use -- to prevent argument injection
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
@@ -898,6 +918,12 @@ class WorkerApp(App):
         """Create PR in background thread."""
         import json
 
+        try:
+            validate_branch_name(branch)
+        except ValueError as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+            return
+
         # Check if PR already exists
         check_result = subprocess.run(
             ["gh", "pr", "view", branch, "--json", "url"],
@@ -914,8 +940,9 @@ class WorkerApp(App):
             return
 
         # Push branch
+        # Use -- to prevent argument injection
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
