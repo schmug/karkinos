@@ -109,6 +109,10 @@ class WorkerDetailScreen(ModalScreen):
         branch = self.worker.get("branch", "")
         default_branch = get_default_branch()
 
+        # Ensure branch doesn't start with - to prevent argument injection
+        if branch.startswith("-"):
+            return "[red]Invalid branch name[/]"
+
         result = subprocess.run(
             [
                 "git",
@@ -214,6 +218,10 @@ class WorkerDetailScreen(ModalScreen):
         lines.append("")
 
         # Get recent commits
+        # Ensure branch doesn't start with - to prevent argument injection
+        if branch.startswith("-"):
+            return "\n".join(lines + ["[red]Invalid branch name[/]"])
+
         result = subprocess.run(
             [
                 "git",
@@ -867,7 +875,7 @@ class WorkerApp(App):
                     continue
 
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
@@ -915,7 +923,7 @@ class WorkerApp(App):
 
         # Push branch
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
@@ -927,7 +935,7 @@ class WorkerApp(App):
 
         # Get last commit message for PR title
         commit_result = subprocess.run(
-            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
+            ["git", "log", "--oneline", "-1", "--format=%s", "--", branch],
             capture_output=True,
             text=True,
         )
