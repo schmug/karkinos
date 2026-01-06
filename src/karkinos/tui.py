@@ -56,13 +56,6 @@ class WorkerDetailScreen(ModalScreen):
         padding: 0 1;
     }
 
-    #detail-footer {
-        height: 1;
-        dock: bottom;
-        background: $primary-background;
-        color: $text-muted;
-        padding: 0 1;
-    }
     """
 
     BINDINGS = [
@@ -82,10 +75,12 @@ class WorkerDetailScreen(ModalScreen):
         with Vertical(id="detail-container"):
             yield Static(id="detail-header")
             yield ScrollableContainer(Static(id="detail-text"), id="detail-content")
-            yield Static("[l] Logs  [d] Diff  [i] Info  [ESC/q] Close", id="detail-footer")
+            yield Footer()
 
     def on_mount(self) -> None:
         self._update_view()
+        # Focus content for keyboard scrolling
+        self.query_one("#detail-content").focus()
 
     def _update_view(self) -> None:
         """Update the display based on current view."""
