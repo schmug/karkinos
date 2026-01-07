@@ -86,6 +86,8 @@ class WorkerDetailScreen(ModalScreen):
 
     def on_mount(self) -> None:
         self._update_view()
+        # Set focus to content so keyboard scrolling works immediately
+        self.query_one("#detail-content").focus()
 
     def _update_view(self) -> None:
         """Update the display based on current view."""
@@ -290,7 +292,8 @@ class EmptyState(Static):
             "[bold]No active worktrees found[/]\n"
             "\n"
             "Create a new git worktree to get started!\n"
-            "[dim]git worktree add ../<name> <branch>[/]"
+            "Use [bold cyan]/worker <branch> <task>[/] in Claude Code\n"
+            "or [dim]git worktree add ../<name> <branch>[/]"
         )
 
 
