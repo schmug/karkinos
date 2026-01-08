@@ -14,6 +14,8 @@ from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
+from karkinos import validate_branch_name
+
 
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
@@ -109,6 +111,11 @@ class WorkerDetailScreen(ModalScreen):
         branch = self.worker.get("branch", "")
         default_branch = get_default_branch()
 
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[dim]Invalid branch name[/]"
+
         result = subprocess.run(
             [
                 "git",
@@ -129,6 +136,11 @@ class WorkerDetailScreen(ModalScreen):
         """Get diff for the worker branch vs default branch."""
         branch = self.worker.get("branch", "")
         default_branch = get_default_branch()
+
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[dim]Invalid branch name[/]"
 
         result = subprocess.run(
             ["git", "diff", f"{default_branch}...{branch}", "--stat"],
@@ -178,6 +190,11 @@ class WorkerDetailScreen(ModalScreen):
         status = self.worker.get("status", "unknown")
         ahead = self.worker.get("ahead", 0)
         default_branch = get_default_branch()
+
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[dim]Invalid branch name[/]"
 
         lines = [
             f"[bold]Branch:[/] {branch}",
@@ -575,6 +592,11 @@ class WorkerApp(App):
             if time.time() - timestamp < self._cache_ttl:
                 return (ci, review)
 
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return ("-", "-")
+
         # Fetch PR status
         result = subprocess.run(
             ["gh", "pr", "view", branch, "--json", "statusCheckRollup,reviewDecision,state"],
@@ -805,6 +827,12 @@ class WorkerApp(App):
             if not path or not branch:
                 continue
 
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                skipped += 1
+                continue
+
             # Skip workers with uncommitted changes
             if status == "modified":
                 skipped += 1
@@ -857,6 +885,12 @@ class WorkerApp(App):
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
+                try:
+                    validate_branch_name(branch)
+                except ValueError:
+                    self.notify(f"Skipping invalid branch: {branch}", severity="warning")
+                    continue
+
                 result = subprocess.run(
                     ["git", "worktree", "remove", w["path"]],
                     capture_output=True,
@@ -890,6 +924,13 @@ class WorkerApp(App):
         if not branch:
             self.notify("No branch for worker", severity="warning")
             return
+
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            self.notify("Invalid branch name (unsafe)", severity="error")
+            return
+
         self.notify(f"Creating PR for {branch}...")
         self._create_pr_async(branch)
 
@@ -914,8 +955,9 @@ class WorkerApp(App):
             return
 
         # Push branch
+        # Use -- to prevent argument injection
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
