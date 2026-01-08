@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from karkinos import validate_branch_name
+
 
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
@@ -59,8 +61,17 @@ def get_worktrees() -> list[dict]:
 
 def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
     """Get number of commits ahead of default branch."""
+    if branch != "detached":
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return 0
+
     if default_branch is None:
         default_branch = get_default_branch()
+
+    # Use -- to separate args where possible, though rev-list range syntax is tricky
+    # But we validated branch, so it should be safe.
     result = subprocess.run(
         ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
         capture_output=True,
@@ -76,6 +87,11 @@ def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
 
 def get_last_commit(branch: str) -> str:
     """Get last commit message for a branch."""
+    try:
+        validate_branch_name(branch)
+    except ValueError:
+        return ""
+
     result = subprocess.run(
         ["git", "log", branch, "--oneline", "-1"],
         capture_output=True,
@@ -368,6 +384,12 @@ def cmd_cleanup(args):
     for wt in workers:
         branch = wt.get("branch")
         if branch and branch in merged:
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                print(f"Skipping invalid branch name: {branch}")
+                continue
+
             if args.dry_run:
                 print(f"Would remove: {wt['path']} ({branch})")
             else:
