@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from karkinos.utils import validate_branch_name
+
 
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
@@ -59,8 +61,14 @@ def get_worktrees() -> list[dict]:
 
 def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
     """Get number of commits ahead of default branch."""
+    if branch != "detached":
+        validate_branch_name(branch)
+
     if default_branch is None:
         default_branch = get_default_branch()
+
+    # Use -- to prevent argument injection where possible, though range syntax is tricky
+    # But since we validated branch doesn't start with -, it is safer.
     result = subprocess.run(
         ["git", "rev-list", "--count", f"{default_branch}..{branch}"],
         capture_output=True,
@@ -76,8 +84,9 @@ def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
 
 def get_last_commit(branch: str) -> str:
     """Get last commit message for a branch."""
+    validate_branch_name(branch)
     result = subprocess.run(
-        ["git", "log", branch, "--oneline", "-1"],
+        ["git", "log", "--oneline", "-1", "--", branch],
         capture_output=True,
         text=True,
     )
@@ -368,6 +377,12 @@ def cmd_cleanup(args):
     for wt in workers:
         branch = wt.get("branch")
         if branch and branch in merged:
+            try:
+                validate_branch_name(branch)
+            except ValueError as e:
+                print(f"Warning: Skipping invalid branch name '{branch}': {e}")
+                continue
+
             if args.dry_run:
                 print(f"Would remove: {wt['path']} ({branch})")
             else:
@@ -383,7 +398,7 @@ def cmd_cleanup(args):
                     continue
                 # Only delete branch if worktree removal succeeded
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )

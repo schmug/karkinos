@@ -234,7 +234,7 @@ def cleanup_workers(dry_run: bool = True) -> dict:
                     text=True,
                 )
                 if result.returncode == 0:
-                    subprocess.run(["git", "branch", "-d", branch], capture_output=True)
+                    subprocess.run(["git", "branch", "-d", "--", branch], capture_output=True)
                     cleaned.append({"path": wt["path"], "branch": branch, "action": "removed"})
                 else:
                     failed.append(

@@ -14,6 +14,8 @@ from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
+from karkinos.utils import validate_branch_name
+
 
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
@@ -107,6 +109,11 @@ class WorkerDetailScreen(ModalScreen):
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
         branch = self.worker.get("branch", "")
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[red]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -128,6 +135,11 @@ class WorkerDetailScreen(ModalScreen):
     def _get_diff(self) -> str:
         """Get diff for the worker branch vs default branch."""
         branch = self.worker.get("branch", "")
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[red]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -186,6 +198,12 @@ class WorkerDetailScreen(ModalScreen):
             f"[bold]Commits ahead of {default_branch}:[/] +{ahead}",
             "",
         ]
+
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            lines.append("[red]Invalid branch name[/]")
+            return "\n".join(lines)
 
         # Get files changed
         result = subprocess.run(
@@ -857,6 +875,12 @@ class WorkerApp(App):
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
+                try:
+                    validate_branch_name(branch)
+                except ValueError:
+                    self.notify(f"Skipping invalid branch: {branch}", severity="warning")
+                    continue
+
                 result = subprocess.run(
                     ["git", "worktree", "remove", w["path"]],
                     capture_output=True,
@@ -867,7 +891,7 @@ class WorkerApp(App):
                     continue
 
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
@@ -898,6 +922,12 @@ class WorkerApp(App):
         """Create PR in background thread."""
         import json
 
+        try:
+            validate_branch_name(branch)
+        except ValueError as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+            return
+
         # Check if PR already exists
         check_result = subprocess.run(
             ["gh", "pr", "view", branch, "--json", "url"],
@@ -915,7 +945,7 @@ class WorkerApp(App):
 
         # Push branch
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
@@ -927,7 +957,7 @@ class WorkerApp(App):
 
         # Get last commit message for PR title
         commit_result = subprocess.run(
-            ["git", "log", branch, "--oneline", "-1", "--format=%s"],
+            ["git", "log", "--oneline", "-1", "--format=%s", "--", branch],
             capture_output=True,
             text=True,
         )
