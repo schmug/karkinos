@@ -15,6 +15,18 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
 
+def format_sync_status(ahead: int, behind: int) -> str:
+    """Format sync status as +A -B string."""
+    parts = []
+    if ahead > 0:
+        parts.append(f"[green]+{ahead}[/]")
+    if behind > 0:
+        parts.append(f"[red]-{behind}[/]")
+    if not parts:
+        return "[dim]sync[/]"
+    return " ".join(parts)
+
+
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
@@ -481,7 +493,7 @@ class WorkerApp(App):
     def on_mount(self) -> None:
         """Set up the table and start refresh timer."""
         table = self.query_one(WorkerTable)
-        table.add_columns("Worktree", "Branch", "Ahead", "CI", "Review", "Changes", "Status")
+        table.add_columns("Worktree", "Branch", "Sync", "CI", "Review", "Changes", "Status")
 
         self.refresh_workers()
         self.refresh_timer = self.set_interval(5, self.refresh_workers)
@@ -551,11 +563,11 @@ class WorkerApp(App):
                     subject = parts[1]
                     ahead_behind = parts[2]
                     try:
-                        ahead, _ = map(int, ahead_behind.split())
+                        ahead, behind = map(int, ahead_behind.split())
                     except ValueError:
-                        ahead = 0
+                        ahead, behind = 0, 0
 
-                    details[branch] = {"subject": subject, "ahead": ahead}
+                    details[branch] = {"subject": subject, "ahead": ahead, "behind": behind}
         return details
 
     def get_pr_status(self, branch: str) -> tuple[str, str]:
@@ -631,6 +643,7 @@ class WorkerApp(App):
 
         # Commits ahead of default branch (from pre-fetched batch)
         wt["ahead"] = details.get("ahead", 0)
+        wt["behind"] = details.get("behind", 0)
 
         # Last commit (from pre-fetched batch)
         wt["last_commit"] = details.get("subject", "")[:50]
@@ -727,7 +740,7 @@ class WorkerApp(App):
         for w in workers:
             path = Path(w["path"]).name
             branch = w.get("branch", "?")
-            ahead = f"+{w.get('ahead', 0)}"
+            sync_status = format_sync_status(w.get("ahead", 0), w.get("behind", 0))
             ci = w.get("ci_status", "-")
             review = w.get("review_status", "-")
             activity = w.get("activity", "")
@@ -767,7 +780,7 @@ class WorkerApp(App):
             elif status == "missing":
                 status = "[red]missing[/]"
 
-            table.add_row(path, branch, ahead, ci, review, activity, status)
+            table.add_row(path, branch, sync_status, ci, review, activity, status)
 
         # Reset cursor to valid position after table rebuild
         if table.row_count > 0:
