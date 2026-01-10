@@ -2,6 +2,7 @@
 """Karkinos MCP Server - Expose worker management tools to Claude Code."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,28 @@ def validate_branch_name(branch: str) -> None:
         raise ValueError("Branch name cannot be empty")
     if branch.startswith("-"):
         raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+    # Strict allow-list of characters to prevent argument injection and ensure valid git ref names.
+    # Allowed: Alphanumeric, underscore, hyphen, dot, slash.
+    # This automatically excludes space, ~, ^, :, ?, *, [, \, and control chars.
+    if not re.match(r"^[a-zA-Z0-9/_.-]+$", branch):
+        raise ValueError(f"Invalid branch name '{branch}': contains invalid characters")
+
+    # Specific sequences banned by git or dangerous
+    if ".." in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '..'")
+
+    if "//" in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '//'")
+
+    if branch.endswith("/") or branch.endswith("."):
+        raise ValueError(f"Invalid branch name '{branch}': cannot end with '/' or '.'")
+
+    if branch.startswith("/"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '/'")
+
+    if branch == "@":
+        raise ValueError(f"Invalid branch name '{branch}': cannot be '@'")
 
 
 def get_worktrees() -> list[dict]:
@@ -316,7 +339,7 @@ def update_branches(dry_run: bool = True, use_rebase: bool = True) -> dict:
             continue
 
         # Check if branch needs updating by comparing with origin/main
-        # Use -- to separate options from args where possible, though merge-base doesn't strictly need it if branch validated
+        # Use -- to separate options from args where possible
         merge_base_result = subprocess.run(
             ["git", "-C", path, "merge-base", branch, f"origin/{default_branch}"],
             capture_output=True,
