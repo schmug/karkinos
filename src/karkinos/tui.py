@@ -4,6 +4,7 @@ import random
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from textual import work
@@ -15,6 +16,7 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
 
+@lru_cache(maxsize=1)
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
