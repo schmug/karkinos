@@ -290,7 +290,7 @@ class EmptyState(Static):
             "[bold]No active worktrees found[/]\n"
             "\n"
             "Create a new git worktree to get started!\n"
-            "[dim]git worktree add ../<name> <branch>[/]"
+            "[dim]Use [bold]/worker[/bold] to create a new agent worktree[/]"
         )
 
 
@@ -735,19 +735,21 @@ class WorkerApp(App):
 
             # Color CI status
             if ci == "pass":
-                ci = "[green]pass[/]"
+                ci = "[green]✔[/]"
             elif ci == "fail":
-                ci = "[red]fail[/]"
+                ci = "[red]✘[/]"
             elif ci == "...":
-                ci = "[yellow]...[/]"
+                ci = "[yellow]⟳[/]"
+            elif ci == "?":
+                ci = "[dim]?[/]"
 
             # Color review status
             if review == "ok":
-                review = "[green]ok[/]"
+                review = "[green]✔[/]"
             elif review == "chg":
-                review = "[red]chg[/]"
+                review = "[red]↻[/]"
             elif review == "req":
-                review = "[yellow]req[/]"
+                review = "[yellow]●[/]"
 
             # Color activity based on git status prefix
             if activity.startswith("M"):
