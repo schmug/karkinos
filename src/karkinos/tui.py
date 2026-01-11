@@ -2,17 +2,18 @@
 
 import random
 import subprocess
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Button, DataTable, Footer, Label, Static
 
 
 def get_default_branch() -> str:
@@ -25,6 +26,59 @@ def get_default_branch() -> str:
     if result.returncode == 0:
         return result.stdout.strip().replace("refs/remotes/origin/", "")
     return "main"  # fallback
+
+
+class ConfirmationScreen(ModalScreen):
+    """Modal screen for confirming actions."""
+
+    CSS = """
+    ConfirmationScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        padding: 0 1;
+        width: 60;
+        height: 11;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #question {
+        height: 1fr;
+        width: 1fr;
+        content-align: center middle;
+    }
+
+    #buttons {
+        width: 100%;
+        align: center middle;
+    }
+
+    Button {
+        margin: 0 2;
+        width: 16;
+    }
+    """
+
+    def __init__(self, message: str, on_confirm: Callable[[], None]):
+        super().__init__()
+        self.message = message
+        self.on_confirm = on_confirm
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self.message, id="question")
+            with Horizontal(id="buttons"):
+                yield Button("Cancel", variant="primary", id="cancel")
+                yield Button("Confirm", variant="error", id="confirm")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            self.on_confirm()
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class WorkerDetailScreen(ModalScreen):
@@ -853,10 +907,21 @@ class WorkerApp(App):
             return
         merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
-        cleaned = 0
+        # Find candidates for cleanup
+        candidates = []
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
+                candidates.append(w)
+
+        if not candidates:
+            self.notify("No merged worktrees found to cleanup", severity="warning")
+            return
+
+        def do_cleanup():
+            cleaned = 0
+            for w in candidates:
+                branch = w.get("branch")
                 result = subprocess.run(
                     ["git", "worktree", "remove", w["path"]],
                     capture_output=True,
@@ -877,8 +942,15 @@ class WorkerApp(App):
 
                 cleaned += 1
 
-        self.refresh_workers()
-        self.notify(f"Cleaned {cleaned} worktree(s)")
+            self.refresh_workers()
+            self.notify(f"Cleaned {cleaned} worktree(s)")
+
+        self.push_screen(
+            ConfirmationScreen(
+                f"Remove {len(candidates)} merged worktree(s)?",
+                on_confirm=do_cleanup,
+            )
+        )
 
     def action_create_pr(self) -> None:
         """Create PR for selected worker."""
