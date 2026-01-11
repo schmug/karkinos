@@ -7,6 +7,14 @@ import sys
 from pathlib import Path
 
 
+def validate_branch_name(branch: str) -> None:
+    """Validate branch name to prevent argument injection."""
+    if not branch:
+        raise ValueError("Branch name cannot be empty")
+    if branch.startswith("-"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
@@ -59,6 +67,7 @@ def get_worktrees() -> list[dict]:
 
 def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
     """Get number of commits ahead of default branch."""
+    validate_branch_name(branch)
     if default_branch is None:
         default_branch = get_default_branch()
     result = subprocess.run(
@@ -76,6 +85,7 @@ def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
 
 def get_last_commit(branch: str) -> str:
     """Get last commit message for a branch."""
+    validate_branch_name(branch)
     result = subprocess.run(
         ["git", "log", branch, "--oneline", "-1"],
         capture_output=True,
@@ -130,7 +140,10 @@ def cmd_list(args):
     for wt in workers:
         path = Path(wt["path"]).name
         branch = wt.get("branch", "detached")
-        ahead = get_commits_ahead(branch) if branch != "detached" else 0
+        try:
+            ahead = get_commits_ahead(branch) if branch != "detached" else 0
+        except ValueError:
+            ahead = "?"
         status = get_worktree_status(wt["path"])
 
         print(f"{path:<30} {branch:<35} +{ahead:<5} {status:<10}")
@@ -273,7 +286,10 @@ def simple_watch():
                 for wt in workers:
                     path = Path(wt["path"]).name
                     branch = wt.get("branch", "detached")
-                    ahead = get_commits_ahead(branch) if branch != "detached" else 0
+                    try:
+                        ahead = get_commits_ahead(branch) if branch != "detached" else 0
+                    except ValueError:
+                        ahead = "?"
                     status = get_worktree_status(wt["path"])
                     print(f"{path:<30} {branch:<35} +{ahead:<5} {status:<10}")
 
@@ -368,6 +384,12 @@ def cmd_cleanup(args):
     for wt in workers:
         branch = wt.get("branch")
         if branch and branch in merged:
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                print(f"Skipping invalid branch name: {branch}")
+                continue
+
             if args.dry_run:
                 print(f"Would remove: {wt['path']} ({branch})")
             else:
@@ -383,7 +405,7 @@ def cmd_cleanup(args):
                     continue
                 # Only delete branch if worktree removal succeeded
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
