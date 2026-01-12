@@ -4,9 +4,12 @@
 import argparse
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 
+# Cache the result to avoid repeated subprocess calls (saving ~4ms per call)
+@lru_cache(maxsize=1)
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
