@@ -8,11 +8,11 @@ from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Button, DataTable, Footer, Label, Static
 
 
 def get_default_branch() -> str:
@@ -249,6 +249,59 @@ class WorkerDetailScreen(ModalScreen):
         """Switch to info view."""
         self.current_view = "info"
         self._update_view()
+
+
+class ConfirmationScreen(ModalScreen):
+    """Reusable confirmation modal."""
+
+    CSS = """
+    ConfirmationScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        width: 40;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #question {
+        width: 100%;
+        content-align: center middle;
+        margin-bottom: 2;
+    }
+
+    #buttons {
+        width: 100%;
+        align: center middle;
+        height: auto;
+    }
+
+    Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, message: str, on_confirm):
+        super().__init__()
+        self.message = message
+        self.on_confirm = on_confirm
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self.message, id="question")
+            with Horizontal(id="buttons"):
+                yield Button("Yes", variant="error", id="yes")
+                yield Button("No", variant="primary", id="no")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "yes":
+            self.on_confirm()
+            self.dismiss()
+        else:
+            self.dismiss()
 
 
 class WorkerStatus(Static):
@@ -853,10 +906,20 @@ class WorkerApp(App):
             return
         merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
-        cleaned = 0
+        to_clean = []
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
+                to_clean.append(w)
+
+        if not to_clean:
+            self.notify("No merged worktrees to clean")
+            return
+
+        def _do_cleanup():
+            cleaned = 0
+            for w in to_clean:
+                branch = w.get("branch")
                 result = subprocess.run(
                     ["git", "worktree", "remove", w["path"]],
                     capture_output=True,
@@ -877,8 +940,15 @@ class WorkerApp(App):
 
                 cleaned += 1
 
-        self.refresh_workers()
-        self.notify(f"Cleaned {cleaned} worktree(s)")
+            self.refresh_workers()
+            self.notify(f"Cleaned {cleaned} worktree(s)")
+
+        self.push_screen(
+            ConfirmationScreen(
+                f"Delete {len(to_clean)} merged worktree(s)?",
+                _do_cleanup,
+            )
+        )
 
     def action_create_pr(self) -> None:
         """Create PR for selected worker."""
