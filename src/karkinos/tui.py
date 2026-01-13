@@ -8,11 +8,11 @@ from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical
+from textual.containers import Container, Grid, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Button, DataTable, Footer, Label, Static
 
 
 def get_default_branch() -> str:
@@ -25,6 +25,56 @@ def get_default_branch() -> str:
     if result.returncode == 0:
         return result.stdout.strip().replace("refs/remotes/origin/", "")
     return "main"  # fallback
+
+
+class ConfirmationScreen(ModalScreen):
+    """Modal screen for confirming actions."""
+
+    CSS = """
+    ConfirmationScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        grid-size: 2;
+        grid-gutter: 1 2;
+        grid-rows: 1fr 3;
+        padding: 0 1;
+        width: 60;
+        height: 11;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #question {
+        column-span: 2;
+        height: 1fr;
+        width: 1fr;
+        content-align: center middle;
+    }
+
+    Button {
+        width: 100%;
+    }
+    """
+
+    def __init__(self, message: str):
+        super().__init__()
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        yield Grid(
+            Label(self.message, id="question"),
+            Button("Cancel", variant="primary", id="cancel"),
+            Button("Confirm", variant="error", id="confirm"),
+            id="dialog",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class WorkerDetailScreen(ModalScreen):
@@ -842,6 +892,16 @@ class WorkerApp(App):
 
     def action_cleanup(self) -> None:
         """Clean up merged worktrees."""
+        self.push_screen(
+            ConfirmationScreen("Delete all merged worktrees? This cannot be undone."),
+            self._cleanup_callback,
+        )
+
+    def _cleanup_callback(self, confirm: bool) -> None:
+        if confirm:
+            self._perform_cleanup()
+
+    def _perform_cleanup(self) -> None:
         default_branch = get_default_branch()
         result = subprocess.run(
             ["git", "branch", "--merged", default_branch],
