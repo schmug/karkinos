@@ -107,6 +107,9 @@ class WorkerDetailScreen(ModalScreen):
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
         branch = self.worker.get("branch", "")
+        if branch.startswith("-"):
+            return "[red]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -128,6 +131,9 @@ class WorkerDetailScreen(ModalScreen):
     def _get_diff(self) -> str:
         """Get diff for the worker branch vs default branch."""
         branch = self.worker.get("branch", "")
+        if branch.startswith("-"):
+            return "[red]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -174,6 +180,9 @@ class WorkerDetailScreen(ModalScreen):
     def _get_info(self) -> str:
         """Get detailed info about the worker."""
         branch = self.worker.get("branch", "unknown")
+        if branch.startswith("-"):
+            return "[red]Invalid branch name[/]"
+
         path = self.worker.get("path", "unknown")
         status = self.worker.get("status", "unknown")
         ahead = self.worker.get("ahead", 0)
@@ -857,6 +866,10 @@ class WorkerApp(App):
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
+                if branch.startswith("-"):
+                    self.notify(f"Skipping invalid branch: {branch}", severity="warning")
+                    continue
+
                 result = subprocess.run(
                     ["git", "worktree", "remove", w["path"]],
                     capture_output=True,
@@ -897,6 +910,10 @@ class WorkerApp(App):
     def _create_pr_async(self, branch: str) -> None:
         """Create PR in background thread."""
         import json
+
+        if branch.startswith("-"):
+            self.call_from_thread(self.notify, f"Invalid branch name: {branch}", severity="error")
+            return
 
         # Check if PR already exists
         check_result = subprocess.run(

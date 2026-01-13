@@ -7,6 +7,14 @@ import sys
 from pathlib import Path
 
 
+def validate_branch_name(branch: str) -> None:
+    """Validate branch name to prevent argument injection."""
+    if not branch:
+        raise ValueError("Branch name cannot be empty")
+    if branch.startswith("-"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
@@ -59,6 +67,9 @@ def get_worktrees() -> list[dict]:
 
 def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
     """Get number of commits ahead of default branch."""
+    if branch != "detached":
+        validate_branch_name(branch)
+
     if default_branch is None:
         default_branch = get_default_branch()
     result = subprocess.run(
@@ -76,6 +87,8 @@ def get_commits_ahead(branch: str, default_branch: str | None = None) -> int:
 
 def get_last_commit(branch: str) -> str:
     """Get last commit message for a branch."""
+    if branch != "detached":
+        validate_branch_name(branch)
     result = subprocess.run(
         ["git", "log", branch, "--oneline", "-1"],
         capture_output=True,
@@ -368,6 +381,14 @@ def cmd_cleanup(args):
     for wt in workers:
         branch = wt.get("branch")
         if branch and branch in merged:
+            # Validate branch name before using it
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                # Should not happen as we got it from git, but if it does, skip it or warn
+                print(f"Skipping invalid branch name: {branch}")
+                continue
+
             if args.dry_run:
                 print(f"Would remove: {wt['path']} ({branch})")
             else:
