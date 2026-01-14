@@ -2,13 +2,16 @@
 """Karkinos CLI - manage parallel Claude workers."""
 
 import argparse
+import functools
 import subprocess
 import sys
 from pathlib import Path
 
 
+@functools.lru_cache(maxsize=1)
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
+    # Cached to avoid repeated subprocess calls (~3ms -> ~0ms)
     result = subprocess.run(
         ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
         capture_output=True,
