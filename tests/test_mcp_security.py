@@ -1,18 +1,18 @@
-import unittest
-from unittest.mock import patch
-from pathlib import Path
-import sys
 import os
-import tempfile
 import shutil
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 # Add src to python path so we can import the server module
 sys.path.insert(0, os.path.abspath("karkinos-plugin/servers/karkinos-mcp"))
 
 import server
 
-class TestSecurity(unittest.TestCase):
 
+class TestSecurity(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.worktree_path = Path(self.test_dir) / "worktree"
@@ -27,7 +27,7 @@ class TestSecurity(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
-    @patch('server.get_worktrees')
+    @patch("server.get_worktrees")
     def test_read_file_path_traversal(self, mock_get_worktrees):
         """Test that read_file prevents path traversal using real file system operations."""
 
@@ -58,5 +58,6 @@ class TestSecurity(unittest.TestCase):
         self.assertIn("error", result)
         self.assertIn("Access denied", result["error"])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

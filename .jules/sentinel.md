@@ -55,3 +55,10 @@ See 'git help git' for an overview of the system.) interprets it as a flag.
 **Prevention:**
 1. Validate inputs (e.g., ensure branch names don't start with `-`).
 2. Use `--` separator in commands (e.g., `git push origin -- {branch}`).
+
+## 2024-12-14 - Argument Injection in CLI/TUI Subprocess Calls
+**Vulnerability:** Argument Injection (CWE-88) in `src/karkinos/cli.py` and `src/karkinos/tui.py`.
+**Learning:** Even when `subprocess.run` list form is used, git interprets arguments starting with `-` as flags. Branch names coming from `git` output (which can be manipulated by malicious actors in a shared repo) must be treated as untrusted.
+**Prevention:**
+1. Use `karkinos.security.validate_branch_name` to reject dangerous patterns (leading dash).
+2. Use `--` separator in git commands where supported (e.g. `git branch -d -- <branch>`).
