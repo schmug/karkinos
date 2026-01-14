@@ -735,19 +735,19 @@ class WorkerApp(App):
 
             # Color CI status
             if ci == "pass":
-                ci = "[green]pass[/]"
+                ci = "[green]✔[/]"
             elif ci == "fail":
-                ci = "[red]fail[/]"
+                ci = "[red]✘[/]"
             elif ci == "...":
-                ci = "[yellow]...[/]"
+                ci = "[yellow]⟳[/]"
 
             # Color review status
             if review == "ok":
-                review = "[green]ok[/]"
+                review = "[green]✔[/]"
             elif review == "chg":
-                review = "[red]chg[/]"
+                review = "[red]✘[/]"
             elif review == "req":
-                review = "[yellow]req[/]"
+                review = "[yellow]●[/]"
 
             # Color activity based on git status prefix
             if activity.startswith("M"):
