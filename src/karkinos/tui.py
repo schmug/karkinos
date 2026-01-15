@@ -8,11 +8,11 @@ from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Button, DataTable, Footer, Static
 
 
 def get_default_branch() -> str:
@@ -25,6 +25,55 @@ def get_default_branch() -> str:
     if result.returncode == 0:
         return result.stdout.strip().replace("refs/remotes/origin/", "")
     return "main"  # fallback
+
+
+class ConfirmationScreen(ModalScreen[bool]):
+    """Modal to confirm destructive actions."""
+
+    CSS = """
+    ConfirmationScreen {
+        align: center middle;
+    }
+
+    #confirm-dialog {
+        width: 60;
+        height: auto;
+        padding: 1 2;
+        background: $surface;
+        border: thick $primary;
+    }
+
+    #confirm-message {
+        text-align: center;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    #confirm-buttons {
+        align: center middle;
+        height: 3;
+    }
+
+    Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, title: str, message: str):
+        super().__init__()
+        self.title_text = title
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm-dialog"):
+            yield Static(f"[bold red]{self.title_text}[/]", id="confirm-title", classes="center")
+            yield Static(self.message, id="confirm-message")
+            with Horizontal(id="confirm-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Confirm", variant="error", id="confirm")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "confirm")
 
 
 class WorkerDetailScreen(ModalScreen):
@@ -851,21 +900,46 @@ class WorkerApp(App):
         if result.returncode != 0:
             self.notify("Failed to get merged branches", severity="error")
             return
-        merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
+        merged_branches = set(b.strip() for b in result.stdout.strip().split("\n"))
+        to_cleanup = [
+            w for w in self.worker_list
+            if w.get("branch") and w.get("branch") in merged_branches
+        ]
+
+        if not to_cleanup:
+            self.notify("No merged worktrees to clean up")
+            return
+
+        def on_confirm(confirm: bool) -> None:
+            if confirm:
+                self._do_cleanup(to_cleanup)
+
+        self.push_screen(
+            ConfirmationScreen(
+                title="Confirm Cleanup",
+                message=f"Delete {len(to_cleanup)} merged worktree(s)?",
+            ),
+            on_confirm,
+        )
+
+    def _do_cleanup(self, workers: list[dict]) -> None:
+        """Perform cleanup of specified workers."""
         cleaned = 0
-        for w in self.worker_list:
+        for w in workers:
             branch = w.get("branch")
-            if branch and branch in merged:
-                result = subprocess.run(
-                    ["git", "worktree", "remove", w["path"]],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0:
-                    self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
-                    continue
+            path = w.get("path")
 
+            result = subprocess.run(
+                ["git", "worktree", "remove", path],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                self.notify(f"Failed to remove worktree: {path}", severity="warning")
+                continue
+
+            if branch:
                 result = subprocess.run(
                     ["git", "branch", "-d", branch],
                     capture_output=True,
@@ -875,7 +949,7 @@ class WorkerApp(App):
                     self.notify(f"Failed to delete branch: {branch}", severity="warning")
                     continue
 
-                cleaned += 1
+            cleaned += 1
 
         self.refresh_workers()
         self.notify(f"Cleaned {cleaned} worktree(s)")
