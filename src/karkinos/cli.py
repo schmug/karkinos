@@ -2,11 +2,13 @@
 """Karkinos CLI - manage parallel Claude workers."""
 
 import argparse
+import functools
 import subprocess
 import sys
 from pathlib import Path
 
 
+@functools.lru_cache(maxsize=1)
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
     result = subprocess.run(
