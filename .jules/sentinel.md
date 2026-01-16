@@ -55,3 +55,7 @@ See 'git help git' for an overview of the system.) interprets it as a flag.
 **Prevention:**
 1. Validate inputs (e.g., ensure branch names don't start with `-`).
 2. Use `--` separator in commands (e.g., `git push origin -- {branch}`).
+## 2024-11-06 - Weak Input Validation in Branch Names
+**Vulnerability:** Input Validation Weakness in `validate_branch_name` in `karkinos-mcp/server.py`.
+**Learning:** The previous validation only checked for a leading `-` to prevent argument injection. However, git allows characters like `..`, `@{`, and shell metacharacters which could be dangerous in different contexts (path traversal, revision parsing, or if accidentally passed to shell). Relying on a "blacklist" (blocking bad chars) is error-prone.
+**Prevention:** Use a "whitelist" approach with strict regex validation (e.g., `^[a-zA-Z0-9/_.-]+$`) to only allow known safe characters. Explicitly reject specific dangerous patterns (`..`, `//`, `@{`) even if they technically match the regex char set.
