@@ -14,6 +14,8 @@ from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Static
 
+from karkinos.utils import validate_branch_name
+
 
 def get_default_branch() -> str:
     """Detect the default branch dynamically from remote HEAD."""
@@ -107,6 +109,11 @@ class WorkerDetailScreen(ModalScreen):
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
         branch = self.worker.get("branch", "")
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[dim]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -128,6 +135,11 @@ class WorkerDetailScreen(ModalScreen):
     def _get_diff(self) -> str:
         """Get diff for the worker branch vs default branch."""
         branch = self.worker.get("branch", "")
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return "[dim]Invalid branch name[/]"
+
         default_branch = get_default_branch()
 
         result = subprocess.run(
@@ -186,6 +198,12 @@ class WorkerDetailScreen(ModalScreen):
             f"[bold]Commits ahead of {default_branch}:[/] +{ahead}",
             "",
         ]
+
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            lines.append("[red]Invalid branch name[/]")
+            return "\n".join(lines)
 
         # Get files changed
         result = subprocess.run(
@@ -566,6 +584,11 @@ class WorkerApp(App):
             ci_status: "pass", "fail", "...", "-" (no PR)
             review_status: "ok", "chg", "req", "-" (no PR)
         """
+        try:
+            validate_branch_name(branch)
+        except ValueError:
+            return ("-", "-")
+
         import json
         import time
 
@@ -805,6 +828,12 @@ class WorkerApp(App):
             if not path or not branch:
                 continue
 
+            try:
+                validate_branch_name(branch)
+            except ValueError:
+                skipped += 1
+                continue
+
             # Skip workers with uncommitted changes
             if status == "modified":
                 skipped += 1
@@ -867,7 +896,7 @@ class WorkerApp(App):
                     continue
 
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch],
+                    ["git", "branch", "-d", "--", branch],
                     capture_output=True,
                     text=True,
                 )
@@ -896,6 +925,12 @@ class WorkerApp(App):
     @work(thread=True)
     def _create_pr_async(self, branch: str) -> None:
         """Create PR in background thread."""
+        try:
+            validate_branch_name(branch)
+        except ValueError as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+            return
+
         import json
 
         # Check if PR already exists
@@ -915,7 +950,7 @@ class WorkerApp(App):
 
         # Push branch
         push_result = subprocess.run(
-            ["git", "push", "-u", "origin", branch],
+            ["git", "push", "-u", "origin", "--", branch],
             capture_output=True,
             text=True,
         )
