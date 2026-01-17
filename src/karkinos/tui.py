@@ -8,11 +8,11 @@ from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Button, DataTable, Footer, Static
 
 
 def get_default_branch() -> str:
@@ -25,6 +25,55 @@ def get_default_branch() -> str:
     if result.returncode == 0:
         return result.stdout.strip().replace("refs/remotes/origin/", "")
     return "main"  # fallback
+
+
+class ConfirmationScreen(ModalScreen):
+    """Modal screen for confirming destructive actions."""
+
+    CSS = """
+    ConfirmationScreen {
+        align: center middle;
+    }
+
+    #confirm-dialog {
+        width: 40;
+        height: auto;
+        padding: 1 2;
+        background: $surface;
+        border: thick $primary;
+    }
+
+    #confirm-label {
+        text-align: center;
+        padding-bottom: 1;
+    }
+
+    #confirm-buttons {
+        height: 3;
+        align: center middle;
+    }
+
+    Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(self, message: str):
+        super().__init__()
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm-dialog"):
+            yield Static(self.message, id="confirm-label")
+            with Horizontal(id="confirm-buttons"):
+                yield Button("Cancel", variant="default", id="cancel")
+                yield Button("Delete", variant="error", id="confirm")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class WorkerDetailScreen(ModalScreen):
@@ -841,7 +890,7 @@ class WorkerApp(App):
         self.call_from_thread(self.refresh_workers)
 
     def action_cleanup(self) -> None:
-        """Clean up merged worktrees."""
+        """Request confirmation to clean up merged worktrees."""
         default_branch = get_default_branch()
         result = subprocess.run(
             ["git", "branch", "--merged", default_branch],
@@ -853,29 +902,53 @@ class WorkerApp(App):
             return
         merged = set(b.strip() for b in result.stdout.strip().split("\n"))
 
-        cleaned = 0
+        # Identify candidates for cleanup
+        candidates = []
         for w in self.worker_list:
             branch = w.get("branch")
             if branch and branch in merged:
-                result = subprocess.run(
-                    ["git", "worktree", "remove", w["path"]],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0:
-                    self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
-                    continue
+                candidates.append(w)
 
-                result = subprocess.run(
-                    ["git", "branch", "-d", branch],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0:
-                    self.notify(f"Failed to delete branch: {branch}", severity="warning")
-                    continue
+        if not candidates:
+            self.notify("No merged worktrees to clean")
+            return
 
-                cleaned += 1
+        def on_confirm(confirmed: bool) -> None:
+            if confirmed:
+                self._do_cleanup(candidates)
+
+        self.push_screen(
+            ConfirmationScreen(f"Delete {len(candidates)} merged worktrees?"),
+            on_confirm,
+        )
+
+    def _do_cleanup(self, candidates: list[dict]) -> None:
+        """Execute cleanup for confirmed candidates."""
+        cleaned = 0
+        for w in candidates:
+            branch = w.get("branch")
+            if not branch:
+                continue
+
+            result = subprocess.run(
+                ["git", "worktree", "remove", w["path"]],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                self.notify(f"Failed to remove worktree: {w['path']}", severity="warning")
+                continue
+
+            result = subprocess.run(
+                ["git", "branch", "-d", branch],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                self.notify(f"Failed to delete branch: {branch}", severity="warning")
+                continue
+
+            cleaned += 1
 
         self.refresh_workers()
         self.notify(f"Cleaned {cleaned} worktree(s)")
