@@ -2,6 +2,7 @@
 """Karkinos MCP Server - Expose worker management tools to Claude Code."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -11,8 +12,30 @@ def validate_branch_name(branch: str) -> None:
     """Validate branch name to prevent argument injection."""
     if not branch:
         raise ValueError("Branch name cannot be empty")
+
+    # Strict allow-list: alphanumeric, /, -, _, .
+    # This prevents most injection attacks and ensures sanity.
+    if not re.match(r"^[a-zA-Z0-9/_.-]+$", branch):
+        raise ValueError(f"Invalid branch name '{branch}': contains invalid characters")
+
+    # Additional Git specific checks
     if branch.startswith("-"):
         raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+    if ".." in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '..'")
+
+    if "//" in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '//'")
+
+    if branch.endswith("/") or branch.endswith("."):
+        raise ValueError(f"Invalid branch name '{branch}': cannot end with '/' or '.'")
+
+    if branch.startswith("/") or branch.startswith("."):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with '/' or '.'")
+
+    if branch.startswith("refs/"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with 'refs/' (use short name)")
 
 
 def get_worktrees() -> list[dict]:
