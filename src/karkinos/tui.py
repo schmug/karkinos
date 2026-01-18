@@ -82,7 +82,7 @@ class WorkerDetailScreen(ModalScreen):
         with Vertical(id="detail-container"):
             yield Static(id="detail-header")
             yield ScrollableContainer(Static(id="detail-text"), id="detail-content")
-            yield Static("[l] Logs  [d] Diff  [i] Info  [ESC/q] Close", id="detail-footer")
+            yield Static("", id="detail-footer")
 
     def on_mount(self) -> None:
         self._update_view()
@@ -91,6 +91,7 @@ class WorkerDetailScreen(ModalScreen):
         """Update the display based on current view."""
         header = self.query_one("#detail-header", Static)
         content = self.query_one("#detail-text", Static)
+        footer = self.query_one("#detail-footer", Static)
 
         branch = self.worker.get("branch", "unknown")
 
@@ -103,6 +104,20 @@ class WorkerDetailScreen(ModalScreen):
         else:  # info
             header.update(f"[bold cyan]Worker Info:[/] {branch}")
             content.update(self._get_info())
+
+        # Update footer with active state highlighting
+        def fmt(key: str, label: str, view: str) -> str:
+            if self.current_view == view:
+                return f"[bold reverse] [{key}] {label} [/]"
+            return f"[{key}] {label}"
+
+        footer_text = (
+            f"{fmt('l', 'Logs', 'logs')}  "
+            f"{fmt('d', 'Diff', 'diff')}  "
+            f"{fmt('i', 'Info', 'info')}  "
+            "[ESC/q] Close"
+        )
+        footer.update(footer_text)
 
     def _get_logs(self) -> str:
         """Get commit log for the worker branch."""
