@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Enforced strict branch name validation in MCP server to prevent argument injection
+
 ## [0.2.1] - 2024-12-XX
 
 ### Added

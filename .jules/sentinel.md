@@ -55,3 +55,7 @@ See 'git help git' for an overview of the system.) interprets it as a flag.
 **Prevention:**
 1. Validate inputs (e.g., ensure branch names don't start with `-`).
 2. Use `--` separator in commands (e.g., `git push origin -- {branch}`).
+## 2024-12-05 - Weak Git Branch Name Validation
+**Vulnerability:** Argument Injection and Logic Errors in Git Subprocesses
+**Learning:** Checking for leading `-` is insufficient for Git branch names. Git commands like `rev-list` parse ranges (`A..B`), which bypasses argument separators (`--`). If a branch name contains `..`, it can alter the command logic (e.g., `git rev-list main..feature..HEAD` might be interpreted as multiple ranges). Additionally, loose validation allows characters that might be dangerous in other contexts or cause unexpected git behavior.
+**Prevention:** Use a strict allow-list regex (`^[a-zA-Z0-9/_.-]+$`) for branch names in automated tools. Explicitly reject dangerous sequences like `..`, `//`, `@{`, and characters like spaces, control chars, and shell metacharacters, even if `subprocess.run(list)` is used.

@@ -2,17 +2,43 @@
 """Karkinos MCP Server - Expose worker management tools to Claude Code."""
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 
 def validate_branch_name(branch: str) -> None:
-    """Validate branch name to prevent argument injection."""
+    """Validate branch name to prevent argument injection and ensure security."""
     if not branch:
         raise ValueError("Branch name cannot be empty")
+
+    # Check for argument injection
     if branch.startswith("-"):
         raise ValueError(f"Invalid branch name '{branch}': cannot start with '-'")
+
+    # Strict allow-list validation
+    # Allow alphanumeric, forward slash, hyphen, dot, underscore
+    if not re.match(r"^[a-zA-Z0-9/_.-]+$", branch):
+        raise ValueError(f"Invalid branch name '{branch}': contains invalid characters")
+
+    # Check for dangerous sequences
+    if ".." in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '..'")
+    if "//" in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '//'")
+    if "@{" in branch:
+        raise ValueError(f"Invalid branch name '{branch}': cannot contain '@{{'")
+
+    # Check for invalid start/end
+    if branch.startswith("/") or branch.endswith("/"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start or end with '/'")
+    if branch.endswith("."):
+        raise ValueError(f"Invalid branch name '{branch}': cannot end with '.'")
+
+    # Check for refs/ prefix to prevent ambiguity
+    if branch.startswith("refs/"):
+        raise ValueError(f"Invalid branch name '{branch}': cannot start with 'refs/'")
 
 
 def get_worktrees() -> list[dict]:
