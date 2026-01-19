@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Karkinos MCP Server - Expose worker management tools to Claude Code."""
 
+import functools
 import json
 import subprocess
 import sys
@@ -53,6 +54,7 @@ def get_worktrees() -> list[dict]:
     return worktrees
 
 
+@functools.lru_cache(maxsize=1)
 def get_default_branch() -> str:
     """Detect the default branch dynamically."""
     result = subprocess.run(
